@@ -5,13 +5,23 @@ graphical models.
 
 ## Setup
 
-GraphL0Learn is included locally under `src/l0bnb2`. Create a project-local
-environment that reuses the bundled NumPy, then install the missing packages:
+GraphL0Learn is included locally under `src/l0bnb2`. The score-matching MIQP
+runner uses Gurobi through `gurobipy`. Create a project-local environment that
+reuses the bundled NumPy, then install the missing packages:
 
 ```bash
 /Users/tongxu/.cache/codex-runtimes/codex-primary-runtime/dependencies/python/bin/python3 -m venv --system-site-packages .venv
 .venv/bin/python -m pip install -r requirements.txt
 ```
+
+If you are using another interpreter with Gurobi already installed, replace
+`.venv/bin/python` in the commands below with that interpreter. A quick check is:
+
+```bash
+.venv/bin/python -c "import gurobipy; print(gurobipy.gurobi.version())"
+```
+
+On this machine, `/usr/bin/python3` can import the user-site `gurobipy` package.
 
 ## Gaussian Test Data
 
@@ -40,23 +50,41 @@ The CLI default seed is `0` for reproducibility.
 
 ## GraphL0BnB Test Run
 
+Generate the default GraphL0Learn dataset first:
+
+```bash
+.venv/bin/python scripts/generate_graphl0learn_data.py
+```
+
+This script can be launched directly in PyCharm. Its defaults are `m=50`,
+`n=500`, `model=banded_Toeplitz_precision`, `half_bandwidth=2`, `rho=0.5`,
+`cond=2`, and `seed=0`.
+
 Run a moderate support-recovery test with GraphL0Learn's `BNBTree`:
 
 ```bash
 .venv/bin/python scripts/run_graphl0bnb_test.py
 ```
 
-By default, this creates or reuses:
+By default, the runner loads this existing dataset:
 
 ```text
-data/gaussian/m025_n150_comp01_side05_hubs02_deg08_seed000/
+data/graphl0learn/m050_n500_graphl0learn_banded_bw02_rho050_cond02_seed000/
 ```
 
-The result row is appended to:
+The direct-run defaults are `m=50`, `n=500`, `l0=0.02`, `l2=0.05`, and a
+300-second time limit. The result row is written fresh to:
 
 ```text
-results/graphl0bnb/results.csv
+results/graphl0bnb/pycharm_default.csv
 ```
+
+The method runners do not generate data. If the dataset folder is missing, run
+`scripts/generate_graphl0learn_data.py` first.
+The default data and result paths are fixed inside this project directory, so
+these scripts can be launched from PyCharm even if the working directory is
+different. The runners use `--verbose True` by default. To silence direct
+PyCharm runs, add `--verbose False` to the run configuration.
 
 The CSV includes runtime, objective/gap information, selected edge count, true
 edge count, TPR, FPR, precision, recall, and F1 score.
@@ -65,10 +93,50 @@ For an exact-size testing graph with multiple L0 penalties:
 
 ```bash
 .venv/bin/python scripts/run_graphl0bnb_test.py \
+  --data-source exact \
   --m 10 \
   --n 500 \
   --target-edges 12 \
   --l0-values 0.005,0.01,0.02,0.05,0.1 \
+  --overwrite-results
+```
+
+## Score-Matching MIQP Test Run
+
+Run the Gaussian score-matching MIQP estimator:
+
+```bash
+/usr/bin/python3 scripts/run_score_matching_miqp_test.py
+```
+
+By default, this runner also loads the same existing GraphL0Learn-generated
+banded Toeplitz dataset:
+
+```text
+data/graphl0learn/m050_n500_graphl0learn_banded_bw02_rho050_cond02_seed000/
+```
+
+The direct-run defaults are `m=50`, `n=500`, `lambda=0.012`, and a 300-second
+time limit. It writes fresh results to:
+
+```text
+results/score_matching_miqp/pycharm_default.csv
+```
+
+Result columns include dataset size information, lambda, data-derived Big-M
+range, runtime, objective, objective bound, MIP gap, node count, Gurobi status,
+selected edge count, true edge count, TPR, FPR, precision, recall, and F1 score.
+
+You can change the test size and lambda grid directly:
+
+```bash
+/usr/bin/python3 scripts/run_score_matching_miqp_test.py \
+  --data-source exact \
+  --m 10 \
+  --n 500 \
+  --target-edges 12 \
+  --lambda-values 0.005,0.01,0.02,0.05,0.1 \
+  --time-limit 60 \
   --overwrite-results
 ```
 

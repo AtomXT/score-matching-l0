@@ -9,9 +9,14 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 from pathlib import Path
 
 import numpy as np
+
+
+current_dir = os.path.dirname(os.path.abspath(__file__))
+PROJECT_DIR = os.path.dirname(current_dir)
 
 
 def build_lattice_with_hubs(
@@ -153,7 +158,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--out",
         type=Path,
-        default=Path("data/gaussian/gaussian_n600_m1000_seed0.npz"),
+        default=Path(os.path.join(PROJECT_DIR, "data", "gaussian", "gaussian_n600_m1000_seed0.npz")),
     )
     return parser.parse_args()
 

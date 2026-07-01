@@ -12,9 +12,6 @@ data/
 !data/gaussian/
 !data/gaussian/.gitkeep
 
-results/
-
-tests/
 
 references/
 
