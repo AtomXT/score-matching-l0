@@ -3,6 +3,12 @@
 Utilities for preliminary experiments with regularized score matching methods for
 graphical models.
 
+The organized paper-scale simulation workflow, including controlled Gaussian graph
+families and Quest job scripts, is documented in
+[`experiments/README.md`](experiments/README.md). The scripts in `scripts/` remain useful
+as small single-instance checks; the code in `experiments/` is the reproducible
+generate--solve--summarize pipeline used for systematic studies.
+
 ## Setup
 
 GraphL0Learn is included locally under `src/l0bnb2`. The score-matching MIQP

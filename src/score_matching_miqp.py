@@ -71,6 +71,7 @@ def build_gaussian_score_matching_formulation(
     x: np.ndarray,
     *,
     assume_centered: bool = False,
+    edge_list: list[tuple[int, int]] | None = None,
 ) -> GaussianScoreMatchingFormulation:
     """Build the profiled quadratic for Gaussian score matching.
 
@@ -87,7 +88,14 @@ def build_gaussian_score_matching_formulation(
         sample_covariance = centered_sample_covariance(data)
 
     m = sample_covariance.shape[0]
-    edge_list = complete_edge_list(m)
+    if edge_list is None:
+        edge_list = complete_edge_list(m)
+    else:
+        edge_list = [tuple(map(int, edge)) for edge in edge_list]
+        if len(set(edge_list)) != len(edge_list):
+            raise ValueError("edge_list must not contain duplicate edges")
+        if any(i < 0 or j >= m or i >= j for i, j in edge_list):
+            raise ValueError("edge_list must contain pairs (i, j) with 0 <= i < j < m")
     n_edges = len(edge_list)
 
     diag = np.diag(sample_covariance)
@@ -241,6 +249,8 @@ def solve_score_matching_miqp(
     mip_gap: float | None = 0.05,
     output_flag: bool = False,
     assume_centered: bool = False,
+    edge_list: list[tuple[int, int]] | None = None,
+    threads: int | None = None,
 ) -> ScoreMatchingMIQPSolution:
     """Solve the L0-regularized profiled Gaussian score-matching MIQP."""
     if lambda_value < 0:
@@ -252,6 +262,7 @@ def solve_score_matching_miqp(
     formulation = build_gaussian_score_matching_formulation(
         x,
         assume_centered=assume_centered,
+        edge_list=edge_list,
     )
     big_m = data_derived_big_m(
         formulation.Q_prof,
@@ -267,6 +278,8 @@ def solve_score_matching_miqp(
         model.Params.TimeLimit = float(time_limit)
     if mip_gap is not None:
         model.Params.MIPGap = float(mip_gap)
+    if threads is not None:
+        model.Params.Threads = int(threads)
 
     beta_vars = model.addVars(n_edges, lb=-GRB.INFINITY, name="beta")
     z_vars = model.addVars(n_edges, vtype=GRB.BINARY, name="z")
