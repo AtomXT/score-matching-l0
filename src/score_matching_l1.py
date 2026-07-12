@@ -12,7 +12,7 @@ from dataclasses import dataclass
 
 import numpy as np
 
-from score_matching_miqp import (
+from .score_matching_miqp import (
     GaussianScoreMatchingFormulation,
     adjacency_from_edge_indicators,
     build_gaussian_score_matching_formulation,

@@ -28,15 +28,12 @@ from experiments.common import (
     parse_list,
     support_metrics,
 )
-from scripts.project_paths import load_src_module
+from src import score_matching_core_miqp as score_matching_core
+from src import score_matching_l1, score_matching_miqp
+from src.graphl0_adapter import fit_graph_l0_bnb
 
 
 PROJECT_DIR = Path(__file__).resolve().parents[1]
-load_src_module("score_matching_miqp")
-score_matching_miqp = load_src_module("score_matching_miqp")
-score_matching_core = load_src_module("score_matching_core_miqp")
-score_matching_l1 = load_src_module("score_matching_l1")
-experiment_utils = load_src_module("utils")
 
 
 RESULT_COLUMNS = [
@@ -290,7 +287,7 @@ def fit_method(
         if len(edges) != p * (p - 1) // 2:
             raise ValueError("GraphL0 does not support the common screened edge set")
         m_bound = float(np.max(np.abs(arrays["precision"])))
-        fit = experiment_utils.fit_graph_l0_bnb(
+        fit = fit_graph_l0_bnb(
             x,
             l0=lambda_value,
             l2=args.graphl0_l2,

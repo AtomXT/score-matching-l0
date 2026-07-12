@@ -1,153 +1,80 @@
-# Score Matching Experiments
+# L0-penalized score matching
 
-Utilities for preliminary experiments with regularized score matching methods for
-graphical models.
+This repository contains the manuscript and experiment code for studying
+L0-penalized score matching in undirected graphical models. The computational
+workflow is organized as a reproducible generate--fit--summarize pipeline.
 
-The organized paper-scale simulation workflow, including controlled Gaussian graph
-families and Quest job scripts, is documented in
-[`experiments/README.md`](experiments/README.md). The scripts in `scripts/` remain useful
-as small single-instance checks; the code in `experiments/` is the reproducible
-generate--solve--summarize pipeline used for systematic studies.
+## Project layout
+
+- `src/` contains the score-matching estimators and solver adapters.
+- `src/l0bnb2/` contains the bundled GraphL0Learn comparison implementation.
+- `experiments/` contains reusable simulation models, data-generation entry
+  points, estimator runners, and Quest job files.
+- `analysis/` contains result aggregation scripts.
+- `data/` contains generated instances and is excluded from version control.
+- `results/` contains retained preliminary results from earlier experiments.
+- `paper/` contains the LaTeX manuscript and compiled PDF.
+- `references/` contains local literature files and research notes.
+
+Detailed simulation settings and Quest commands are documented in
+[`experiments/README.md`](experiments/README.md).
 
 ## Setup
 
-GraphL0Learn is included locally under `src/l0bnb2`. The score-matching MIQP
-runner uses Gurobi through `gurobipy`. Create a project-local environment that
-reuses the bundled NumPy, then install the missing packages:
+Create a project-local Python environment and install the dependencies:
 
 ```bash
-/Users/tongxu/.cache/codex-runtimes/codex-primary-runtime/dependencies/python/bin/python3 -m venv --system-site-packages .venv
+python3 -m venv .venv
 .venv/bin/python -m pip install -r requirements.txt
 ```
 
-If you are using another interpreter with Gurobi already installed, replace
-`.venv/bin/python` in the commands below with that interpreter. A quick check is:
+Gurobi and a valid license are required for the MIQP estimators. The L1
+score-matching estimator and data generators do not require Gurobi.
+
+## Generate experiment instances
+
+From the project root:
 
 ```bash
-.venv/bin/python -c "import gurobipy; print(gurobipy.gurobi.version())"
+.venv/bin/python -m experiments.generate_gaussian_experiments \
+  --study local_example \
+  --topology-list chain,erdos_renyi \
+  --p-list 20 \
+  --n-list 40,100 \
+  --degree-list 4 \
+  --signal-list 0.2 \
+  --condition-list 10 \
+  --rep-list 0,1
 ```
 
-On this machine, `/usr/bin/python3` can import the user-site `gurobipy` package.
+Instances are written under `data/gaussian_experiments/<study>/`. Reusable
+graph and precision-matrix constructions are defined in
+`experiments/gaussian_models.py`; this module also retains the
+lattice-with-hubs design of Lin, Drton, and Shojaie (2016).
 
-## Gaussian Test Data
-
-The first generator follows the Gaussian simulation procedure from Section 4.1 of
-Lin, Drton, and Shojaie, "Estimation of High-Dimensional Graphical Models Using
-Regularized Score Matching".
+## Fit the estimators
 
 ```bash
-python scripts/generate_gaussian_data.py \
-  --n 600 \
-  --seed 1 \
-  --out data/gaussian/gaussian_n600_m1000_seed1.npz
-```
-
-The saved `.npz` file contains:
-
-- `X`: generated samples with shape `(n, m)`
-- `Sigma`: population correlation matrix
-- `precision`: sparse diagonally dominant matrix before inversion
-- `adjacency`: graph adjacency matrix
-- `params_json`: parameters used for the run
-
-Default parameters match the paper's Gaussian setup: 10 disconnected `10 x 10`
-lattice components, 3 hubs per component, hub degree 20, and sample size 600.
-The CLI default seed is `0` for reproducibility.
-
-## GraphL0BnB Test Run
-
-Generate the default GraphL0Learn dataset first:
-
-```bash
-.venv/bin/python scripts/generate_graphl0learn_data.py
-```
-
-This script can be launched directly in PyCharm. Its defaults are `m=50`,
-`n=500`, `model=banded_Toeplitz_precision`, `half_bandwidth=2`, `rho=0.5`,
-`cond=2`, and `seed=0`.
-
-Run a moderate support-recovery test with GraphL0Learn's `BNBTree`:
-
-```bash
-.venv/bin/python scripts/run_graphl0bnb_test.py
-```
-
-By default, the runner loads this existing dataset:
-
-```text
-data/graphl0learn/m050_n500_graphl0learn_banded_bw02_rho050_cond02_seed000/
-```
-
-The direct-run defaults are `m=50`, `n=500`, `l0=0.02`, `l2=0.05`, and a
-300-second time limit. The result row is written fresh to:
-
-```text
-results/graphl0bnb/pycharm_default.csv
-```
-
-The method runners do not generate data. If the dataset folder is missing, run
-`scripts/generate_graphl0learn_data.py` first.
-The default data and result paths are fixed inside this project directory, so
-these scripts can be launched from PyCharm even if the working directory is
-different. The runners use `--verbose True` by default. To silence direct
-PyCharm runs, add `--verbose False` to the run configuration.
-
-The CSV includes runtime, objective/gap information, selected edge count, true
-edge count, TPR, FPR, precision, recall, and F1 score.
-
-For an exact-size testing graph with multiple L0 penalties:
-
-```bash
-.venv/bin/python scripts/run_graphl0bnb_test.py \
-  --data-source exact \
-  --m 10 \
-  --n 500 \
-  --target-edges 12 \
-  --l0-values 0.005,0.01,0.02,0.05,0.1 \
+.venv/bin/python -m experiments.Run_gaussian_experiments \
+  --study local_example \
+  --method-list sm_l0,sm_l1 \
+  --penalty-multiplier-list 0.25,0.5,1,2,4 \
+  --time-limit 600 \
+  --mip-gap 0.01 \
+  --threads 8 \
+  --job-name local_example \
   --overwrite-results
 ```
 
-## Score-Matching MIQP Test Run
+Raw results are written to `experiments_results/`. Each fitted method uses the
+same saved instance and candidate-edge set.
 
-Run the Gaussian score-matching MIQP estimator:
-
-```bash
-/usr/bin/python3 scripts/run_score_matching_miqp_test.py
-```
-
-By default, this runner also loads the same existing GraphL0Learn-generated
-banded Toeplitz dataset:
-
-```text
-data/graphl0learn/m050_n500_graphl0learn_banded_bw02_rho050_cond02_seed000/
-```
-
-The direct-run defaults are `m=50`, `n=500`, `lambda=0.012`, and a 300-second
-time limit. It writes fresh results to:
-
-```text
-results/score_matching_miqp/pycharm_default.csv
-```
-
-Result columns include dataset size information, lambda, data-derived Big-M
-range, runtime, objective, objective bound, MIP gap, node count, Gurobi status,
-selected edge count, true edge count, TPR, FPR, precision, recall, and F1 score.
-
-You can change the test size and lambda grid directly:
+## Summarize results
 
 ```bash
-/usr/bin/python3 scripts/run_score_matching_miqp_test.py \
-  --data-source exact \
-  --m 10 \
-  --n 500 \
-  --target-edges 12 \
-  --lambda-values 0.005,0.01,0.02,0.05,0.1 \
-  --time-limit 60 \
-  --overwrite-results
+.venv/bin/python analysis/summarize_gaussian_experiments.py \
+  --study local_example
 ```
 
-## Running Tests
-
-```bash
-.venv/bin/python -m unittest discover -s tests -v
-```
+The summary contains Monte Carlo means and standard errors for the requested
+support-recovery, estimation, predictive-score, and computational metrics.

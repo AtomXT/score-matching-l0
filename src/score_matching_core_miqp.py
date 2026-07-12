@@ -7,7 +7,7 @@ from typing import Any
 
 import numpy as np
 
-from score_matching_miqp import (
+from .score_matching_miqp import (
     BigMBounds,
     GaussianScoreMatchingFormulation,
     adjacency_from_edge_indicators,
