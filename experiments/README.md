@@ -1,117 +1,272 @@
-# Gaussian experiment workflow
+# Experiment code guide
 
-The experiment code follows a generate--solve--summarize workflow. Data generation is
-separated from estimation so that every formulation is evaluated on exactly the same
-random instances. Each instance directory contains the training, validation, and test
-samples, the population covariance and precision matrices, the true adjacency matrix,
-and a complete JSON record of the random seeds and achieved graph properties. The solver
-driver appends one result row immediately after each fit. Consequently, completed fits
-remain available if a later instance reaches its time limit or fails.
+This folder contains the data generators, fitting programs, and Quest submission files
+for the first experiment in the paper: Gaussian graph recovery.  The experiment has
+three panels:
 
-## Experimental setup
+| Panel | Question | Settings |
+|---|---|---|
+| Sample size | Does recovery improve as more observations are available? | `p=40`, `n=20,40,80,160` |
+| Dimension | How does recovery change with problem dimension at a fixed ratio? | `(p,n)=(20,40),(40,80),(60,120)` |
+| Topology | Is the comparison sensitive to degree heterogeneity? | Erdős--Rényi-type and scale-free graphs at `(p,n)=(40,80)` |
 
-For a graph with adjacency matrix \(A\), the generator first draws a symmetric signed
-edge matrix \(W\). It then forms \(K=W+cI\), choosing \(c\) to attain the requested
-spectral condition number before standardization. The lower endpoint of the edge-weight
-interval is calibrated to make the minimum nonzero partial correlation as close as
-possible to its target. Finally, the covariance is standardized to have unit diagonal.
-The requested and achieved condition numbers and signal strengths are both retained;
-this is important because the two targets need not be jointly attainable on every graph.
+Every setting uses target average degree `4`, target minimum signal `0.20`, target
+condition number `10`, and ten independent replications.  The central
+Erdős--Rényi-type setting `(p,n)=(40,80)` is shared by all three panels and is stored only
+once.
 
-The controlled graph families are chains, four-neighbor square lattices, banded graphs,
-hub graphs, connected Erdos--Renyi-type graphs, and Barabasi--Albert scale-free graphs.
-Independent training, validation, and test samples of size \(n\) are generated from each
-population matrix. Unless a job script states otherwise, the subset-selection penalty is
-\(\rho=c\log(r)/n\), whereas the loss-matched \(\ell_1\) penalty is
-\(c\sqrt{\log(r)/n}\). Here \(r\) is the number of candidate edges and
-\(c\in\{0.25,0.5,1,2,4\}\).
+The workflow separates data generation from fitting:
 
-Within a replication, configurations that differ only in sample size, signal, or
-condition number use the same underlying graph and edge randomness. Thus each factor
-study is paired rather than being confounded by a newly generated topology. By default,
-the population graph changes across replications. Adding `--fixed-graph` holds it fixed
-and varies only the observations, providing the complementary within-graph experiment
-described in the paper.
-
-The following command generates a small local example:
-
-```bash
-python3 -m experiments.generate_gaussian_experiments \
-  --study "local_example" \
-  --topology-list "chain,erdos_renyi" \
-  --p-list "20" \
-  --n-list "40,100" \
-  --degree-list "4" \
-  --signal-list "0.2" \
-  --condition-list "10" \
-  --rep-list "0,1"
+```text
+generate saved datasets  ->  run all methods on the same datasets  ->  summarize CSV files
 ```
 
-## Compared methods
+## Quick local test
 
-The runner currently includes three score-matching estimators. `sm_l0` is the profiled
-big-\(M\) MIQP, `sm_l0_core` adds the coordinatewise optimality relations, and `sm_l1`
-is the loss-matched regularized score-matching estimator solved by FISTA. `graphl0` is
-also available as a Gaussian pseudolikelihood comparison when the complete candidate
-graph is used. The two score-matching penalties use their respective theoretical rates;
-their multiplier and realized numerical value are both recorded. Native tuning paths
-should still be run separately when a method-specific calibration is desired.
+Each panel runner can be opened in PyCharm and run with the green **Run** button.  No
+arguments are needed:
 
-```bash
-/usr/bin/python3 -m experiments.Run_gaussian_experiments \
-  --study "local_example" \
-  --method-list "sm_l0,sm_l0_core,sm_l1" \
-  --penalty-multiplier-list "0.25,0.5,1,2,4" \
-  --time-limit "600" \
-  --mip-gap "0.01" \
-  --threads "8" \
-  --job-name "local_example" \
-  --overwrite-results
+```text
+Run_gaussian_sample_size.py
+Run_gaussian_dimension.py
+Run_gaussian_topology.py
 ```
 
-The complete graph is the default candidate set. For a larger pilot, empirical
-correlation screening can be enabled with `--candidate-rule correlation --screen-size K`.
-This screening is heuristic: the result file therefore records both the number of
-candidate edges and the fraction of population edges retained. A screened incumbent
-must not be described as the global solution over the complete graph.
+A no-argument run does **not** launch the full experiment.  It creates one deterministic
+`p=8,n=16` test instance, fits SM--L1 at one penalty value, and writes a small result
+file.  SM--L1 is used for this smoke test so that it finishes in a few seconds and does
+not require a local Gurobi installation.  The automatically assigned job names are:
 
-Each result row reports support recovery, matrix estimation, held-out score, solver time,
-objective bounds, optimality gap, node count, and whether the declared MIP tolerance was
-met. It also records the Python, NumPy, and Gurobi versions, host, thread count, and SLURM
-job identifiers. A time-limited incumbent is retained, but it is not labeled certified.
+```text
+sample_size_test_run
+dimension_test_run
+topology_test_run
+```
 
-## Quest studies
+The test data are saved below `data/gaussian_experiments/<panel>_test_run/`, and results
+are saved below `experiments_results/`.  Repeating a no-argument run safely replaces its
+test result file.
 
-The Quest scripts are grouped by purpose under `experiments/quest_jobs/`.
-
-- `gaussian_support_recovery/sample_size.sh` varies \(n\) at fixed \(p\).
-- `gaussian_support_recovery/problem_size.sh` varies \(p\) at fixed \(n/p=2\).
-- `gaussian_support_recovery/degree.sh` varies the maximum degree of a hub graph.
-- `gaussian_support_recovery/signal.sh` varies the minimum-partial-correlation target.
-- `gaussian_computation/formulation.sh` compares the base and strengthened MIQPs on
-  identical instances.
-
-The statistical jobs use 100 array tasks, one for each independent replication. The
-computational study uses 20. Statistical fits use a 600-second per-fit limit; the
-formulation study uses 3600 seconds. Submit a job from the project root, for example:
+The same tests can be run from the project root:
 
 ```bash
-mkdir -p experiments/quest_jobs/outlog
+python3 experiments/Run_gaussian_sample_size.py
+python3 experiments/Run_gaussian_dimension.py
+python3 experiments/Run_gaussian_topology.py
+```
+
+## Panel entry points
+
+Each panel has one data generator and one runner.  The small wrapper files contain only
+the panel identity; shared behavior is implemented in `primary_panel_workflow.py` so that
+the settings cannot drift between panels.
+
+### Sample-size panel
+
+Generate all four settings and all ten replications:
+
+```bash
+python3 experiments/generate_gaussian_sample_size_data.py
+```
+
+Run a quick no-argument test:
+
+```bash
+python3 experiments/Run_gaussian_sample_size.py
+```
+
+The full Quest job is:
+
+```text
+quest_jobs/gaussian_support_recovery/sample_size.sh
+```
+
+### Dimension panel
+
+Generate all three settings and all ten replications:
+
+```bash
+python3 experiments/generate_gaussian_dimension_data.py
+```
+
+Run a quick no-argument test:
+
+```bash
+python3 experiments/Run_gaussian_dimension.py
+```
+
+The full Quest job is:
+
+```text
+quest_jobs/gaussian_support_recovery/dimension.sh
+```
+
+### Topology panel
+
+Generate both settings and all ten replications:
+
+```bash
+python3 experiments/generate_gaussian_topology_data.py
+```
+
+Run a quick no-argument test:
+
+```bash
+python3 experiments/Run_gaussian_topology.py
+```
+
+The full Quest job is:
+
+```text
+quest_jobs/gaussian_support_recovery/topology.sh
+```
+
+### Generate the complete first experiment at once
+
+`generate_primary_graph_recovery_data.py` is a convenience entry point that generates
+all seven unique settings and all ten replications in one local run:
+
+```bash
+python3 experiments/generate_primary_graph_recovery_data.py
+```
+
+It writes `design.json` and a 70-instance `manifest.json` under:
+
+```text
+data/gaussian_experiments/primary_graph_recovery/
+```
+
+Existing datasets are not overwritten unless the relevant generator receives
+`--overwrite` or `OVERWRITE_EXISTING` is changed deliberately.
+
+## Running the full experiment on Quest
+
+Submit the three array scripts from the project root so that the relative log path
+resolves correctly:
+
+```bash
 sbatch experiments/quest_jobs/gaussian_support_recovery/sample_size.sh
+sbatch experiments/quest_jobs/gaussian_support_recovery/dimension.sh
+sbatch experiments/quest_jobs/gaussian_support_recovery/topology.sh
 ```
 
-The scripts reproduce the software structure used in the `QP_indicator` project: they
-purge modules, activate the `python39` environment, load Gurobi, generate the assigned
-instances, and then run the requested methods. Account, partition, environment, and
-email directives are intentionally explicit and should be checked before submission.
+Each script declares `#SBATCH --array=0-9`, so one submission creates ten independent
+Slurm tasks.  Task 0 generates and fits replication 0, task 1 handles replication 1, and
+so on through task 9.  The fixed runner job names are `sample_size`, `dimension`, and
+`topology`; the array index appears only in the replication selector, manifest filename,
+result filename, and log filename.  Thus parallel tasks cannot overwrite one another.
 
-## Summaries
+The Quest scripts follow the conventions used in the QP_indicator project:
 
-After the array jobs finish, aggregate Monte Carlo means and standard errors with:
+- account `p32811`;
+- the `python-miniconda3` module and `python39` environment;
+- the Gurobi module;
+- one node with eight allocated CPU cores; and
+- email notifications to `tongxu2027@u.northwestern.edu`.
+
+The account, environment name, and email should be confirmed before submission.  The
+current per-task wall-time limits are 24 hours for one sample-size replication, 18 hours
+for one dimension replication, and 12 hours for one topology replication.  These are
+maximum limits rather than expected runtimes.  The 16-GB and eight-core requests remain
+provisional.  Run one representative array task first, inspect it with `seff`, and then
+adjust wall time and memory.  The solver thread count must remain equal to the allocated
+CPU count.  The `experiments/quest_jobs/outlog/` directory is already tracked because
+Slurm requires the output directory to exist before submission.
+
+Northwestern's current references are the
+[Quest Slurm guide](https://rcdsdocs.it.northwestern.edu/systems/quest/user-guide/slurm/slurm.html)
+and the
+[Mamba/Conda guide](https://rcdsdocs.it.northwestern.edu/tutorials/software-management/conda-mamba-quest/mamba-conda-quest.html).
+
+## Full runner options
+
+Supplying `--job-name` switches a panel runner from its small local test to the complete
+panel design.  For example, this command fits replication zero of the sample-size panel:
 
 ```bash
-python3 analysis/summarize_gaussian_experiments.py --study "sample_size"
+python3 -m experiments.Run_gaussian_sample_size \
+  --rep-list 0 \
+  --job-name sample_size \
+  --results-csv experiments_results/gaussian_primary_graph_recovery_sample_size_rep0.csv \
+  --method-list sm_l0,sm_l1,graphl0,glasso \
+  --penalty-multiplier-list 0.03125,0.044,0.0625,0.088,0.125,0.177,0.25,0.354,0.5,0.707,1,1.414,2,2.828,4 \
+  --time-limit 600 \
+  --mip-gap 0.01 \
+  --threads 8
 ```
 
-Error rows are retained in the raw files and excluded from numerical averages. Their
-frequency should be reported separately rather than silently treated as missing data.
+The available method names are:
+
+- `sm_l0`: proposed L0-penalized score-matching MIQP;
+- `sm_l1`: loss-matched L1 score matching;
+- `graphl0`: bundled L0-penalized Gaussian pseudolikelihood method; and
+- `glasso`: graphical lasso from scikit-learn.
+
+Gurobi and a valid license are required for `sm_l0`.  Install the packages in
+`requirements.txt` in the Quest environment before submitting the full jobs.
+
+## Generated instance contents
+
+Each instance directory contains:
+
+```text
+dataset.npz
+metadata.json
+```
+
+`dataset.npz` contains the training, validation, and test observations, the population
+covariance and precision matrices, and the true adjacency matrix.  `metadata.json`
+records the requested and achieved signal, condition number, degree, random seeds, and
+other generation diagnostics.  Panel-specific manifest files list all generated
+instances.
+
+Do not edit generated instances manually.  If a design changes, use a new study name or
+regenerate it explicitly with overwrite enabled.
+
+## Shared implementation files
+
+### `primary_panel_workflow.py`
+
+Defines the three manuscript panels, the full four-method penalty path, the local test
+behavior, panel filtering, and the command-line interfaces used by the six small panel
+entry points.
+
+### `generate_gaussian_experiments.py`
+
+General Gaussian data generator used by every dedicated generator.  It constructs one
+population graph and independent training, validation, and test samples, then records all
+seeds and diagnostics.  It can also be used directly for pilot studies; unlike the panel
+generators, direct use requires a `--study` argument.
+
+### `Run_gaussian_experiments.py`
+
+General fitting engine used by every dedicated runner.  It loads saved instances,
+standardizes using training-sample quantities, applies one common candidate graph, fits
+each requested method and penalty, and appends one result row immediately.  Direct use
+requires a `--study` argument; normal users should use the panel runners.
+
+### `gaussian_models.py`
+
+Contains graph constructors and precision-matrix calibration routines.  It is a library
+module and is not intended to be run directly.
+
+### `common.py`
+
+Contains shared parsing, atomic data storage, CSV output, screening, and evaluation
+metrics.  It is a library module and is not intended to be run directly.
+
+### `__init__.py`
+
+Marks `experiments` as a Python package.  It has no runnable experiment.
+
+## Summarizing results
+
+After the Quest jobs finish, combine their CSV files with:
+
+```bash
+python3 analysis/summarize_gaussian_experiments.py --study primary_graph_recovery
+```
+
+The summarizer aggregates Monte Carlo means and standard errors.  Check error rows and
+solver statuses before interpreting a summary; failures and uncertified time-limited
+fits must not be silently discarded.

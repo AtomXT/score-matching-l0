@@ -28,7 +28,6 @@ from experiments.common import (
     parse_list,
     support_metrics,
 )
-from src import score_matching_core_miqp as score_matching_core
 from src import score_matching_l1, score_matching_miqp
 from src.graphl0_adapter import fit_graph_l0_bnb
 
@@ -108,13 +107,22 @@ RESULT_COLUMNS = [
 ]
 
 
-def parse_args() -> argparse.Namespace:
+def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--study", required=True)
     parser.add_argument("--job-name", default="local_test")
-    parser.add_argument("--method-list", default="sm_l0,sm_l0_core,sm_l1")
+    parser.add_argument("--method-list", default="sm_l0,sm_l1")
     parser.add_argument("--penalty-multiplier-list", default="0.25,0.5,1,2,4")
     parser.add_argument("--rep-list", default=None)
+    parser.add_argument("--topology-list", default=None)
+    parser.add_argument("--p-list", default=None)
+    parser.add_argument("--n-list", default=None)
+    parser.add_argument(
+        "--configuration-list",
+        default=None,
+        help="Semicolon-separated topology:p:n triples used as exact filters.",
+    )
+    parser.add_argument("--max-instances", type=int, default=None)
     parser.add_argument("--candidate-rule", choices=["complete", "correlation"], default="complete")
     parser.add_argument("--screen-size", type=int, default=None)
     parser.add_argument("--time-limit", type=float, default=3600.0)
@@ -124,6 +132,9 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--l1-max-iter", type=int, default=20_000)
     parser.add_argument("--l1-tolerance", type=float, default=1e-8)
     parser.add_argument("--graphl0-l2", type=float, default=0.05)
+    parser.add_argument("--graphl0-m-bound", type=float, default=100.0)
+    parser.add_argument("--glasso-max-iter", type=int, default=1_000)
+    parser.add_argument("--glasso-tolerance", type=float, default=1e-4)
     parser.add_argument("--verbose", action="store_true")
     parser.add_argument("--overwrite-results", action="store_true")
     parser.add_argument(
@@ -136,7 +147,7 @@ def parse_args() -> argparse.Namespace:
         type=Path,
         default=None,
     )
-    return parser.parse_args()
+    return parser.parse_args(argv)
 
 
 def environment_record(args: argparse.Namespace) -> dict[str, Any]:
@@ -188,7 +199,7 @@ def penalty_value(method: str, multiplier: float, r: int, n: int) -> tuple[float
     Subset selection uses a squared-noise penalty of order log(r) / n, whereas
     the coefficientwise L1 penalty is on the score scale sqrt(log(r) / n).
     """
-    if method == "sm_l1":
+    if method in {"sm_l1", "glasso"}:
         return multiplier * math.sqrt(math.log(r) / n), "sqrt(log(r)/n)"
     return multiplier * math.log(r) / n, "log(r)/n"
 
@@ -205,6 +216,28 @@ def _solution_metrics(
     }
 
 
+def standardize_instance(arrays: dict[str, np.ndarray]) -> dict[str, np.ndarray]:
+    """Standardize all splits using training-sample quantities.
+
+    The transformed population precision is returned as well, so matrix-error
+    calculations remain on the same scale as the fitted estimators.
+    """
+    train = np.asarray(arrays["X_train"], dtype=float)
+    location = train.mean(axis=0)
+    scale = train.std(axis=0, ddof=0)
+    if np.any(scale <= np.finfo(float).eps):
+        raise ValueError("every training variable must have positive empirical variance")
+
+    transformed = dict(arrays)
+    for name in ("X", "X_train", "X_validation", "X_test"):
+        transformed[name] = (np.asarray(arrays[name], dtype=float) - location) / scale
+    scale_matrix = np.diag(scale)
+    inverse_scale = np.diag(1.0 / scale)
+    transformed["precision"] = scale_matrix @ arrays["precision"] @ scale_matrix
+    transformed["Sigma"] = inverse_scale @ arrays["Sigma"] @ inverse_scale
+    return transformed
+
+
 def fit_method(
     method: str,
     arrays: dict[str, np.ndarray],
@@ -216,31 +249,6 @@ def fit_method(
     x = arrays["X_train"]
     if method == "sm_l0":
         solution = score_matching_miqp.solve_score_matching_miqp(
-            x,
-            lambda_value=lambda_value,
-            big_m_scale=args.big_m_scale,
-            time_limit=args.time_limit,
-            mip_gap=args.mip_gap,
-            output_flag=args.verbose,
-            edge_list=edges,
-            threads=args.threads,
-        )
-        absolute_gap = solution.objective - solution.objective_bound
-        return {
-            "status": solution.status,
-            "certified": float(solution.has_solution and solution.mip_gap <= args.mip_gap),
-            "runtime_seconds": solution.runtime_seconds,
-            "objective": solution.objective,
-            "objective_bound": solution.objective_bound,
-            "absolute_gap": absolute_gap,
-            "relative_gap": solution.mip_gap,
-            "nodes": solution.nodes,
-            "big_m_min": float(solution.big_m.values.min()),
-            "big_m_max": float(solution.big_m.values.max()),
-            **_solution_metrics(arrays, solution.adjacency, solution.precision),
-        }
-    if method == "sm_l0_core":
-        solution = score_matching_core.solve_score_matching_core_miqp(
             x,
             lambda_value=lambda_value,
             big_m_scale=args.big_m_scale,
@@ -286,12 +294,11 @@ def fit_method(
         p = x.shape[1]
         if len(edges) != p * (p - 1) // 2:
             raise ValueError("GraphL0 does not support the common screened edge set")
-        m_bound = float(np.max(np.abs(arrays["precision"])))
         fit = fit_graph_l0_bnb(
             x,
             l0=lambda_value,
             l2=args.graphl0_l2,
-            m_bound=m_bound,
+            m_bound=args.graphl0_m_bound,
             gap_tol=args.mip_gap,
             time_limit=args.time_limit,
             verbose=args.verbose,
@@ -308,14 +315,51 @@ def fit_method(
             "nodes": fit["nodes"],
             **_solution_metrics(arrays, adjacency, precision),
         }
+    if method == "glasso":
+        try:
+            from sklearn.covariance import graphical_lasso
+        except ImportError as exc:
+            raise ImportError(
+                "the glasso comparison requires scikit-learn; install requirements.txt"
+            ) from exc
+
+        start = time.perf_counter()
+        centered = x - x.mean(axis=0, keepdims=True)
+        sample_covariance = centered.T @ centered / centered.shape[0]
+        _, precision = graphical_lasso(
+            sample_covariance,
+            alpha=lambda_value,
+            max_iter=args.glasso_max_iter,
+            tol=args.glasso_tolerance,
+        )
+        runtime = time.perf_counter() - start
+        adjacency = np.abs(precision) > 1e-7
+        np.fill_diagonal(adjacency, False)
+        return {
+            "status": "converged",
+            "certified": "",
+            "runtime_seconds": runtime,
+            **_solution_metrics(arrays, adjacency, precision),
+        }
     raise ValueError(f"unsupported method: {method}")
 
 
-def main() -> None:
-    args = parse_args()
+def run(args: argparse.Namespace) -> Path:
+    """Run the requested fits and return the result-file path."""
     methods = parse_list(args.method_list, str)
     multipliers = parse_list(args.penalty_multiplier_list, float)
     requested_reps = set(parse_list(args.rep_list, int)) if args.rep_list else None
+    requested_topologies = (
+        set(parse_list(args.topology_list, str)) if args.topology_list else None
+    )
+    requested_p = set(parse_list(args.p_list, int)) if args.p_list else None
+    requested_n = set(parse_list(args.n_list, int)) if args.n_list else None
+    requested_configurations = None
+    if args.configuration_list:
+        requested_configurations = set()
+        for specification in args.configuration_list.split(";"):
+            topology, p_text, n_text = specification.split(":")
+            requested_configurations.add((topology, int(p_text), int(n_text)))
     results_csv = args.results_csv or (
         PROJECT_DIR / "experiments_results" / f"gaussian_{args.study}_{args.job_name}.csv"
     )
@@ -329,12 +373,37 @@ def main() -> None:
             "Run experiments.generate_gaussian_experiments first."
         )
 
-    failures = 0
-    environment = environment_record(args)
+    selected_instances: list[tuple[Path, dict[str, Any]]] = []
     for dataset_path in instance_dirs:
-        arrays, metadata = load_instance(dataset_path.parent)
+        _, metadata = load_instance(dataset_path.parent)
         if requested_reps is not None and int(metadata["rep"]) not in requested_reps:
             continue
+        if requested_topologies is not None and metadata["topology"] not in requested_topologies:
+            continue
+        if requested_p is not None and int(metadata["p"]) not in requested_p:
+            continue
+        if requested_n is not None and int(metadata["n"]) not in requested_n:
+            continue
+        configuration = (
+            str(metadata["topology"]),
+            int(metadata["p"]),
+            int(metadata["n"]),
+        )
+        if requested_configurations is not None and configuration not in requested_configurations:
+            continue
+        selected_instances.append((dataset_path, metadata))
+    if args.max_instances is not None:
+        if args.max_instances <= 0:
+            raise ValueError("--max-instances must be positive")
+        selected_instances = selected_instances[: args.max_instances]
+    if not selected_instances:
+        raise ValueError("the requested filters selected no experiment instances")
+
+    failures = 0
+    environment = environment_record(args)
+    for dataset_path, metadata in selected_instances:
+        arrays, _ = load_instance(dataset_path.parent)
+        arrays = standardize_instance(arrays)
         edges, screen_recall = candidate_edges(
             arrays["X_train"],
             arrays["adjacency"],
@@ -381,6 +450,11 @@ def main() -> None:
     print(f"Wrote {results_csv}")
     if failures:
         raise SystemExit(f"{failures} fits failed; see error_message in the result file")
+    return results_csv
+
+
+def main(argv: list[str] | None = None) -> None:
+    run(parse_args(argv))
 
 
 if __name__ == "__main__":

@@ -12,7 +12,6 @@ PROJECT_DIR = os.path.dirname(current_dir)
 SOURCES = (
     ("GraphL0BnB", "l0", "results/graphl0bnb/m20_exact_grid.csv"),
     ("ScoreMatchingMIQP", "lambda", "results/score_matching_miqp/m20_exact_grid.csv"),
-    ("ScoreMatchingCORe", "lambda", "results/score_matching_core/m20_exact_grid.csv"),
 )
 
 OUTPUT = os.path.join(current_dir, "m20_exact_comparison.csv")
@@ -42,10 +41,6 @@ FIELDNAMES = [
     "nodes",
     "big_m_min",
     "big_m_max",
-    "kappa_min",
-    "kappa_max",
-    "tau_min",
-    "tau_max",
     "selected_edges",
     "true_edges",
     "TP",
@@ -86,7 +81,7 @@ def main() -> None:
             collected.append(comparison_row(method, regularization_name, row))
 
     with open(OUTPUT, "w", newline="") as file:
-        writer = csv.DictWriter(file, fieldnames=FIELDNAMES)
+        writer = csv.DictWriter(file, fieldnames=FIELDNAMES, lineterminator="\n")
         writer.writeheader()
         writer.writerows(collected)
 

@@ -1,5 +1,5 @@
 #!/bin/bash
-# Run all ten replications of the primary sample-size panel.
+# Run all ten replications of the primary topology panel.
 # Each array task handles exactly one replication.
 # Confirm the p32811 account and python39 environment before submission.
 # This resource request is provisional; revise it after checking a pilot with seff.
@@ -7,10 +7,10 @@
 #SBATCH --partition=normal
 #SBATCH --nodes=1
 #SBATCH --ntasks=8
-#SBATCH --time=24:00:00
+#SBATCH --time=12:00:00
 #SBATCH --mem=16G
 #SBATCH --array=0-9
-#SBATCH --job-name=sm_sample_size
+#SBATCH --job-name=sm_topology
 #SBATCH --output=experiments/quest_jobs/outlog/%x_%A_%a.log
 #SBATCH --mail-type=END,FAIL
 #SBATCH --mail-user=tongxu2027@u.northwestern.edu
@@ -24,14 +24,14 @@ module load gurobi
 
 REPLICATION="${SLURM_ARRAY_TASK_ID}"
 
-python3 -m experiments.generate_gaussian_sample_size_data \
+python3 -m experiments.generate_gaussian_topology_data \
   --rep-list "${REPLICATION}" \
-  --manifest-name "manifest_sample_size_rep${REPLICATION}"
+  --manifest-name "manifest_topology_rep${REPLICATION}"
 
-python3 -m experiments.Run_gaussian_sample_size \
+python3 -m experiments.Run_gaussian_topology \
   --rep-list "${REPLICATION}" \
-  --job-name "sample_size" \
-  --results-csv "experiments_results/gaussian_primary_graph_recovery_sample_size_rep${REPLICATION}.csv" \
+  --job-name "topology" \
+  --results-csv "experiments_results/gaussian_primary_graph_recovery_topology_rep${REPLICATION}.csv" \
   --method-list "sm_l0,sm_l1,graphl0,glasso" \
   --penalty-multiplier-list "0.03125,0.044,0.0625,0.088,0.125,0.177,0.25,0.354,0.5,0.707,1,1.414,2,2.828,4" \
   --time-limit "600" \

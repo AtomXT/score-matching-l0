@@ -4,6 +4,8 @@ from __future__ import annotations
 
 import csv
 import json
+import os
+import tempfile
 from pathlib import Path
 from typing import Any, Callable, TypeVar
 
@@ -47,20 +49,28 @@ def save_instance(
 ) -> None:
     """Save one complete synthetic instance and its generation record."""
     directory.mkdir(parents=True, exist_ok=True)
-    np.savez_compressed(
-        directory / "dataset.npz",
-        X=train,
-        X_train=train,
-        X_validation=validation,
-        X_test=test,
-        Sigma=covariance,
-        precision=precision,
-        adjacency=adjacency.astype(np.int8),
-    )
-    (directory / "metadata.json").write_text(
-        json.dumps(metadata, indent=2, sort_keys=True) + "\n",
-        encoding="utf-8",
-    )
+    # Write each file atomically.  This matters on Quest when two panel jobs
+    # encounter the one configuration shared by the primary-study panels.
+    with tempfile.NamedTemporaryFile(dir=directory, suffix=".npz", delete=False) as file:
+        temporary_dataset = Path(file.name)
+        np.savez_compressed(
+            file,
+            X=train,
+            X_train=train,
+            X_validation=validation,
+            X_test=test,
+            Sigma=covariance,
+            precision=precision,
+            adjacency=adjacency.astype(np.int8),
+        )
+    os.replace(temporary_dataset, directory / "dataset.npz")
+
+    with tempfile.NamedTemporaryFile(
+        mode="w", dir=directory, suffix=".json", encoding="utf-8", delete=False
+    ) as file:
+        temporary_metadata = Path(file.name)
+        file.write(json.dumps(metadata, indent=2, sort_keys=True) + "\n")
+    os.replace(temporary_metadata, directory / "metadata.json")
 
 
 def load_instance(directory: Path) -> tuple[dict[str, np.ndarray], dict[str, Any]]:
@@ -139,9 +149,15 @@ def heldout_scores(x: np.ndarray, precision: np.ndarray) -> dict[str, float]:
     """Compute held-out Hyvarinen score and Gaussian negative log-likelihood."""
     centered = x - x.mean(axis=0, keepdims=True)
     covariance = centered.T @ centered / centered.shape[0]
-    score = 0.5 * np.trace(precision @ covariance @ precision) - np.trace(precision)
-    sign, logdet = np.linalg.slogdet(precision)
-    nll = 0.5 * (np.trace(covariance @ precision) - logdet) if sign > 0 else np.nan
+    with np.errstate(over="ignore", invalid="ignore", divide="ignore"):
+        score = 0.5 * np.trace(precision @ covariance @ precision) - np.trace(precision)
+        sign, logdet = np.linalg.slogdet(precision)
+        trace_term = np.trace(covariance @ precision)
+    nll = (
+        0.5 * (trace_term - logdet)
+        if sign > 0 and np.isfinite(logdet) and np.isfinite(trace_term)
+        else np.nan
+    )
     return {"heldout_score": float(score), "heldout_gaussian_nll": float(nll)}
 
 
