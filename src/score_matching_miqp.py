@@ -11,41 +11,9 @@ L0-regularized off-diagonal MIQP with Gurobi.
 
 from __future__ import annotations
 
-from dataclasses import dataclass
 from typing import Any
 
 import numpy as np
-
-
-@dataclass(frozen=True)
-class GaussianScoreMatchingFormulation:
-    sample_covariance: np.ndarray
-    edge_list: list[tuple[int, int]]
-    Q_prof: np.ndarray
-    q_prof: np.ndarray
-    Q_alpha_alpha: np.ndarray
-    Q_alpha_beta: np.ndarray
-    q_alpha: np.ndarray
-
-
-@dataclass(frozen=True)
-class ScoreMatchingMIQPSolution:
-    formulation: GaussianScoreMatchingFormulation
-    big_m: float
-    big_m_relaxation_objective: float
-    big_m_relaxation_runtime_seconds: float
-    beta: np.ndarray
-    z: np.ndarray
-    precision: np.ndarray
-    adjacency: np.ndarray
-    has_solution: bool
-    runtime_seconds: float
-    objective: float
-    objective_bound: float
-    mip_gap: float
-    nodes: float
-    status: str
-    status_code: int
 
 
 def centered_sample_covariance(x: np.ndarray) -> np.ndarray:
@@ -65,7 +33,7 @@ def build_gaussian_score_matching_formulation(
     *,
     assume_centered: bool = False,
     edge_list: list[tuple[int, int]] | None = None,
-) -> GaussianScoreMatchingFormulation:
+) -> dict[str, Any]:
     """Build the profiled quadratic for Gaussian score matching.
 
     The off-diagonal vector beta contains K[i, j] for each upper-triangle pair.
@@ -118,39 +86,39 @@ def build_gaussian_score_matching_formulation(
     q_prof = q_beta - Q_alpha_beta.T @ alpha_solve_qa
 
     Q_prof = 0.5 * (Q_prof + Q_prof.T)
-    return GaussianScoreMatchingFormulation(
-        sample_covariance=sample_covariance,
-        edge_list=edge_list,
-        Q_prof=Q_prof,
-        q_prof=q_prof,
-        Q_alpha_alpha=Q_alpha_alpha,
-        Q_alpha_beta=Q_alpha_beta,
-        q_alpha=q_alpha,
-    )
+    return {
+        "sample_covariance": sample_covariance,
+        "edge_list": edge_list,
+        "Q_prof": Q_prof,
+        "q_prof": q_prof,
+        "Q_alpha_alpha": Q_alpha_alpha,
+        "Q_alpha_beta": Q_alpha_beta,
+        "q_alpha": q_alpha,
+    }
 
 
 def profiled_alpha(
     beta: np.ndarray,
-    formulation: GaussianScoreMatchingFormulation,
+    formulation: dict[str, Any],
 ) -> np.ndarray:
     """Recover the profiled diagonal entries for a fixed beta."""
     beta = np.asarray(beta, dtype=float)
     return np.linalg.solve(
-        formulation.Q_alpha_alpha,
-        formulation.q_alpha - formulation.Q_alpha_beta @ beta,
+        formulation["Q_alpha_alpha"],
+        formulation["q_alpha"] - formulation["Q_alpha_beta"] @ beta,
     )
 
 
 def reconstruct_precision(
     beta: np.ndarray,
-    formulation: GaussianScoreMatchingFormulation,
+    formulation: dict[str, Any],
 ) -> np.ndarray:
     """Reconstruct the full symmetric precision matrix from beta."""
     beta = np.asarray(beta, dtype=float)
-    m = formulation.sample_covariance.shape[0]
+    m = formulation["sample_covariance"].shape[0]
 
     precision = np.zeros((m, m), dtype=float)
-    for value, (i, j) in zip(beta, formulation.edge_list):
+    for value, (i, j) in zip(beta, formulation["edge_list"]):
         precision[i, j] = value
         precision[j, i] = value
     np.fill_diagonal(precision, profiled_alpha(beta, formulation))
@@ -173,6 +141,47 @@ def adjacency_from_edge_indicators(
     return adjacency
 
 
+def solve_big_m_relaxation(
+    formulation: dict[str, Any],
+    lambda_value: float,
+    big_m_init: float,
+    threads: int | None,
+) -> dict[str, float]:
+    """Use the continuous indicator relaxation to choose a scalar big-M."""
+    import gurobipy as gp
+    from gurobipy import GRB
+
+    n_edges = len(formulation["edge_list"])
+    relaxation = gp.Model("gaussian_score_matching_big_m_relaxation")
+    relaxation.Params.OutputFlag = 0
+    if threads is not None:
+        relaxation.Params.Threads = int(threads)
+    coefficients = relaxation.addMVar(n_edges, lb=-GRB.INFINITY, name="beta")
+    indicators = relaxation.addMVar(n_edges, lb=0.0, ub=1.0, name="z")
+    relaxation.addConstr(coefficients <= big_m_init * indicators)
+    relaxation.addConstr(coefficients >= -big_m_init * indicators)
+    relaxation.setObjective(
+        0.5 * (coefficients @ formulation["Q_prof"] @ coefficients)
+        - formulation["q_prof"] @ coefficients
+        + lambda_value * indicators.sum(),
+        GRB.MINIMIZE,
+    )
+    relaxation.optimize()
+
+    runtime = _safe_float(lambda: relaxation.Runtime)
+    if relaxation.SolCount:
+        max_abs_coefficient = float(np.max(np.abs(np.asarray(coefficients.X))))
+        big_m = min(
+            big_m_init,
+            max(big_m_init * 1e-6, 2.0 * max_abs_coefficient),
+        )
+        objective = _safe_float(lambda: relaxation.ObjVal)
+    else:
+        big_m = float(big_m_init)
+        objective = float("nan")
+    return {"big_m": big_m, "objective": objective, "runtime_seconds": runtime}
+
+
 def solve_score_matching_miqp(
     x: np.ndarray,
     *,
@@ -184,7 +193,7 @@ def solve_score_matching_miqp(
     assume_centered: bool = False,
     edge_list: list[tuple[int, int]] | None = None,
     threads: int | None = None,
-) -> ScoreMatchingMIQPSolution:
+) -> dict[str, Any]:
     """Solve the L0-regularized profiled Gaussian score-matching MIQP."""
     import gurobipy as gp
     from gurobipy import GRB
@@ -194,35 +203,17 @@ def solve_score_matching_miqp(
         assume_centered=assume_centered,
         edge_list=edge_list,
     )
-    n_edges = len(formulation.edge_list)
-    m = formulation.sample_covariance.shape[0]
-    Q = formulation.Q_prof
-    q = formulation.q_prof
-
-    relaxation = gp.Model("gaussian_score_matching_big_m_relaxation")
-    relaxation.Params.OutputFlag = 0
-    if threads is not None:
-        relaxation.Params.Threads = int(threads)
-    beta_relax = relaxation.addMVar(n_edges, lb=-GRB.INFINITY, name="beta")
-    z_relax = relaxation.addMVar(n_edges, lb=0.0, ub=1.0, name="z")
-    relaxation.addConstr(beta_relax <= big_m_init * z_relax)
-    relaxation.addConstr(beta_relax >= -big_m_init * z_relax)
-    relaxation.setObjective(
-        0.5 * (beta_relax @ Q @ beta_relax)
-        - q @ beta_relax
-        + lambda_value * z_relax.sum(),
-        GRB.MINIMIZE,
+    n_edges = len(formulation["edge_list"])
+    m = formulation["sample_covariance"].shape[0]
+    Q = formulation["Q_prof"]
+    q = formulation["q_prof"]
+    relaxation = solve_big_m_relaxation(
+        formulation,
+        lambda_value,
+        big_m_init,
+        threads,
     )
-    relaxation.optimize()
-
-    relaxation_runtime = _safe_float(lambda: relaxation.Runtime)
-    if relaxation.SolCount:
-        max_abs_beta = float(np.max(np.abs(np.asarray(beta_relax.X))))
-        big_m = min(big_m_init, max(big_m_init * 1e-6, 2.0 * max_abs_beta))
-        relaxation_objective = _safe_float(lambda: relaxation.ObjVal)
-    else:
-        big_m = float(big_m_init)
-        relaxation_objective = float("nan")
+    big_m = relaxation["big_m"]
 
     model = gp.Model("gaussian_score_matching_miqp")
     model.Params.OutputFlag = 1 if output_flag else 0
@@ -251,31 +242,32 @@ def solve_score_matching_miqp(
         beta = np.asarray(beta_vars.X, dtype=float)
         z = np.asarray(z_vars.X) >= 0.5
         precision = reconstruct_precision(beta, formulation)
-        adjacency = adjacency_from_edge_indicators(z, formulation.edge_list, m)
+        adjacency = adjacency_from_edge_indicators(z, formulation["edge_list"], m)
     else:
         beta = np.zeros(n_edges, dtype=float)
         z = np.zeros(n_edges, dtype=bool)
         precision = reconstruct_precision(beta, formulation)
-        adjacency = adjacency_from_edge_indicators(z, formulation.edge_list, m)
+        adjacency = adjacency_from_edge_indicators(z, formulation["edge_list"], m)
 
-    return ScoreMatchingMIQPSolution(
-        formulation=formulation,
-        big_m=big_m,
-        big_m_relaxation_objective=relaxation_objective,
-        big_m_relaxation_runtime_seconds=relaxation_runtime,
-        beta=beta,
-        z=z,
-        precision=precision,
-        adjacency=adjacency,
-        has_solution=has_solution,
-        runtime_seconds=relaxation_runtime + _safe_float(lambda: model.Runtime),
-        objective=_safe_float(lambda: model.ObjVal) if has_solution else np.nan,
-        objective_bound=_safe_float(lambda: model.ObjBound),
-        mip_gap=_safe_float(lambda: model.MIPGap) if has_solution else np.nan,
-        nodes=_safe_float(lambda: model.NodeCount),
-        status=status,
-        status_code=int(model.Status),
-    )
+    return {
+        "formulation": formulation,
+        "big_m": big_m,
+        "big_m_relaxation_objective": relaxation["objective"],
+        "big_m_relaxation_runtime_seconds": relaxation["runtime_seconds"],
+        "beta": beta,
+        "z": z,
+        "precision": precision,
+        "adjacency": adjacency,
+        "has_solution": has_solution,
+        "runtime_seconds": relaxation["runtime_seconds"]
+        + _safe_float(lambda: model.Runtime),
+        "objective": _safe_float(lambda: model.ObjVal) if has_solution else np.nan,
+        "objective_bound": _safe_float(lambda: model.ObjBound),
+        "mip_gap": _safe_float(lambda: model.MIPGap) if has_solution else np.nan,
+        "nodes": _safe_float(lambda: model.NodeCount),
+        "status": status,
+        "status_code": int(model.Status),
+    }
 
 
 def _safe_float(get_value: Any) -> float:

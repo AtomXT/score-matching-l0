@@ -2,8 +2,8 @@
 """Generate every dataset for the primary Gaussian graph-recovery study.
 
 This file is intentionally a no-argument entry point.  Running it directly in
-PyCharm creates the seven configurations and ten replications specified in the
-manuscript, together with one manifest describing all 70 instances.
+PyCharm creates the six configurations and ten replications specified in the
+manuscript, together with one manifest describing all 60 instances.
 """
 
 from __future__ import annotations
@@ -25,7 +25,6 @@ else:
 
 from experiments.generate_gaussian_experiments import generate_one
 from experiments.primary_graph_recovery_config import (
-    CALIBRATION_CONFIGURATION,
     NUMBER_OF_REPLICATIONS,
     PANEL_SETTINGS as REGISTERED_PANEL_SETTINGS,
 )
@@ -45,7 +44,6 @@ def _setting(configuration: tuple[str, int, int]) -> dict[str, int | str]:
     return {"topology": topology, "p": p, "n": n}
 
 
-CALIBRATION_SETTING = _setting(CALIBRATION_CONFIGURATION)
 PANEL_SETTINGS = {
     panel: [_setting(configuration) for configuration in configurations]
     for panel, configurations in REGISTERED_PANEL_SETTINGS.items()
@@ -53,15 +51,8 @@ PANEL_SETTINGS = {
 
 
 def unique_settings() -> list[dict[str, int | str]]:
-    """Return the seven configurations without repeated panel entries."""
-    calibration_key = (
-        str(CALIBRATION_SETTING["topology"]),
-        int(CALIBRATION_SETTING["p"]),
-        int(CALIBRATION_SETTING["n"]),
-    )
-    unique: dict[tuple[str, int, int], dict[str, int | str]] = {
-        calibration_key: CALIBRATION_SETTING
-    }
+    """Return the six configurations without repeated panel entries."""
+    unique: dict[tuple[str, int, int], dict[str, int | str]] = {}
     for settings in PANEL_SETTINGS.values():
         for setting in settings:
             key = (str(setting["topology"]), int(setting["p"]), int(setting["n"]))
@@ -117,7 +108,6 @@ def generate_all(
         "target_degree": TARGET_DEGREE,
         "target_signal": TARGET_SIGNAL,
         "target_condition": TARGET_CONDITION,
-        "calibration_setting": CALIBRATION_SETTING,
         "panels": PANEL_SETTINGS,
         "unique_settings": settings,
     }

@@ -43,7 +43,7 @@ From the project root:
 .venv/bin/python experiments/generate_primary_graph_recovery_data.py
 ```
 
-The 70 registered instances are written under
+The 60 registered instances are written under
 `data/gaussian_experiments/primary_graph_recovery/`.  Fitting programs and
 Quest jobs only read these saved instances; they never generate data.
 
@@ -60,9 +60,9 @@ Gurobi.
 
 ## Run and summarize the full study
 
-The full workflow first calibrates one transferable constant per method on the
-smallest-dimensional configuration and then evaluates all other configurations
-without retuning.  On Quest, submit the dependency-aware workflow with:
+Choose each method's penalty constant manually with the panel runners, then set
+that method and constant in the corresponding Quest job.  Submit the three
+panel arrays with:
 
 ```bash
 bash experiments/quest_jobs/gaussian_support_recovery/submit_all.sh

@@ -1,9 +1,8 @@
 #!/usr/bin/env python3
 """Run Gaussian graph-recovery methods on saved experiment instances.
 
-This driver never generates data.  Calibration runs fit every requested method
-over a common grid of penalty constants.  Evaluation runs load one previously
-selected constant per method and keep that constant fixed across instances.
+This driver never generates data.  It fits every requested method and penalty
+constant directly supplied on the command line.
 """
 
 from __future__ import annotations
@@ -30,10 +29,9 @@ from experiments.common import (
 )
 from experiments.penalty_rates import (
     PENALTY_RATE_LABELS,
-    load_selected_constants,
     penalty_value,
 )
-from src import score_matching_l1, score_matching_miqp
+from src import score_matching_core_miqp, score_matching_l1, score_matching_miqp
 
 
 PROJECT_DIR = Path(__file__).resolve().parents[1]
@@ -56,6 +54,9 @@ RESULT_COLUMNS = [
     "fit_available",
     "certified",
     "runtime_seconds",
+    "UB",
+    "LB",
+    "gap",
     "TP",
     "FP",
     "FN",
@@ -74,24 +75,18 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser.add_argument("--job-name", default="local_test")
     parser.add_argument(
         "--stage",
-        choices=["calibration", "evaluation", "local_check"],
+        choices=["evaluation", "local_check"],
         default="evaluation",
-        help=(
-            "Calibration and local-check runs use the supplied constant grid; "
-            "evaluation loads one calibrated constant per method from JSON."
-        ),
     )
-    parser.add_argument("--method-list", default="sm_l0,sm_l1")
+    parser.add_argument(
+        "--method-list",
+        default="sm_l0,sm_l1",
+        help="Methods: sm_l0, sm_l0_core, sm_l1, graphl0, or glasso.",
+    )
     parser.add_argument(
         "--penalty-constant-list",
-        default=None,
-        help="Comma-separated constants for calibration/local-check runs.",
-    )
-    parser.add_argument(
-        "--penalty-constants-json",
-        type=Path,
-        default=None,
-        help="Selected-constant JSON required for an evaluation run.",
+        default="1",
+        help="Comma-separated constants applied to every requested method.",
     )
     parser.add_argument("--rep-list", default=None)
     parser.add_argument("--topology-list", default=None)
@@ -209,8 +204,13 @@ def fit_method(
 ) -> dict[str, Any]:
     """Fit one method and return its graph metrics and solver diagnostics."""
     x = arrays["X_train"]
-    if method == "sm_l0":
-        solution = score_matching_miqp.solve_score_matching_miqp(
+    if method in {"sm_l0", "sm_l0_core"}:
+        solver = (
+            score_matching_core_miqp.solve_score_matching_core_miqp
+            if method == "sm_l0_core"
+            else score_matching_miqp.solve_score_matching_miqp
+        )
+        solution = solver(
             x,
             lambda_value=lambda_value,
             big_m_init=args.big_m_init,
@@ -220,28 +220,34 @@ def fit_method(
             edge_list=edges,
             threads=args.threads,
         )
-        absolute_gap = solution.objective - solution.objective_bound
+        absolute_gap = solution["objective"] - solution["objective_bound"]
         return {
-            "status": solution.status,
-            "fit_available": float(solution.has_solution),
+            "status": solution["status"],
+            "fit_available": float(solution["has_solution"]),
             "certified": float(
-                solution.has_solution and solution.mip_gap <= args.mip_gap
+                solution["has_solution"] and solution["mip_gap"] <= args.mip_gap
             ),
-            "runtime_seconds": solution.runtime_seconds,
-            "objective": solution.objective,
-            "objective_bound": solution.objective_bound,
+            "runtime_seconds": solution["runtime_seconds"],
+            "formulation": "core" if method == "sm_l0_core" else "standard",
+            "UB": solution["objective"],
+            "LB": solution["objective_bound"],
+            "gap": solution["mip_gap"],
+            "objective": solution["objective"],
+            "objective_bound": solution["objective_bound"],
             "absolute_gap": absolute_gap,
-            "relative_gap": solution.mip_gap,
-            "nodes": solution.nodes,
+            "relative_gap": solution["mip_gap"],
+            "nodes": solution["nodes"],
             "big_m_initial": args.big_m_init,
-            "big_m": solution.big_m,
-            "big_m_relaxation_objective": solution.big_m_relaxation_objective,
-            "big_m_relaxation_runtime_seconds": (
-                solution.big_m_relaxation_runtime_seconds
-            ),
+            "big_m": solution["big_m"],
+            "big_m_relaxation_objective": solution[
+                "big_m_relaxation_objective"
+            ],
+            "big_m_relaxation_runtime_seconds": solution[
+                "big_m_relaxation_runtime_seconds"
+            ],
             **(
-                _support_metrics(arrays, solution.adjacency)
-                if solution.has_solution
+                _support_metrics(arrays, solution["adjacency"])
+                if solution["has_solution"]
                 else {}
             ),
         }
@@ -259,17 +265,19 @@ def fit_method(
         )
         runtime = time.perf_counter() - start
         metrics = (
-            _support_metrics(arrays, solution.adjacency) if solution.converged else {}
+            _support_metrics(arrays, solution["adjacency"])
+            if solution["converged"]
+            else {}
         )
         return {
-            "status": solution.status,
-            "fit_available": float(solution.converged),
+            "status": solution["status"],
+            "fit_available": float(solution["converged"]),
             "certified": "",
             "runtime_seconds": runtime,
-            "objective": solution.objective,
-            "iterations": solution.iterations,
+            "objective": solution["objective"],
+            "iterations": solution["iterations"],
             "convergence_metric": "full_sweep_l1_change",
-            "convergence_value": solution.sweep_change,
+            "convergence_value": solution["sweep_change"],
             **metrics,
         }
     if method == "graphl0":
@@ -362,16 +370,6 @@ def _append_jsonl(path: Path, record: dict[str, Any]) -> None:
         file.write(json.dumps(_json_ready(record), sort_keys=True, allow_nan=False) + "\n")
 
 
-def _fit_plan(args: argparse.Namespace, methods: list[str]) -> list[tuple[str, float]]:
-    """Construct the method--constant pairs appropriate for the requested stage."""
-    if args.stage == "evaluation":
-        selected = load_selected_constants(args.penalty_constants_json, methods)
-        return [(method, selected[method]) for method in methods]
-
-    constants = parse_list(args.penalty_constant_list, float)
-    return [(method, constant) for method in methods for constant in constants]
-
-
 def _requested_configurations(text: str | None) -> set[tuple[str, int, int]] | None:
     if text is None:
         return None
@@ -385,7 +383,8 @@ def _requested_configurations(text: str | None) -> set[tuple[str, int, int]] | N
 def run(args: argparse.Namespace) -> Path:
     """Run the requested fits and return the compact result-file path."""
     methods = parse_list(args.method_list, str)
-    fit_plan = _fit_plan(args, methods)
+    constants = parse_list(args.penalty_constant_list, float)
+    fit_plan = [(method, constant) for method in methods for constant in constants]
     requested_rep_list = parse_list(args.rep_list, int) if args.rep_list else None
     requested_reps = set(requested_rep_list) if requested_rep_list is not None else None
     requested_topologies = (

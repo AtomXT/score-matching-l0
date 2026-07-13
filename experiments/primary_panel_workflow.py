@@ -13,20 +13,10 @@ from experiments.generate_primary_graph_recovery_data import (
     STUDY,
     generate_panel,
 )
-from experiments.primary_graph_recovery_config import (
-    EVALUATION_SETTINGS,
-    NUMBER_OF_REPLICATIONS,
-    configuration_filter,
-)
+from experiments.primary_graph_recovery_config import NUMBER_OF_REPLICATIONS
 
 
 PROJECT_DIR = Path(__file__).resolve().parents[1]
-DEFAULT_CONSTANTS_FILE = (
-    PROJECT_DIR
-    / "experiments_results"
-    / "penalty_calibration"
-    / "selected_constants.json"
-)
 
 
 def generate_panel_cli(panel: str, argv: list[str] | None = None) -> None:
@@ -54,16 +44,6 @@ def generate_panel_cli(panel: str, argv: list[str] | None = None) -> None:
 
 def run_panel(panel: str, args: argparse.Namespace) -> None:
     """Pass one panel runner's explicit arguments to the fitting engine."""
-    configuration_list = args.configuration_list
-    if configuration_list is None and not any(
-        (args.topology_list, args.p_list, args.n_list)
-    ):
-        configuration_list = configuration_filter(
-            EVALUATION_SETTINGS[panel]
-            if args.stage == "evaluation"
-            else EVALUATION_SETTINGS[panel][:1]
-        )
-
     runner_argv = [
         "--study",
         STUDY,
@@ -102,24 +82,24 @@ def run_panel(panel: str, args: argparse.Namespace) -> None:
         "--rep-list",
         args.rep_list,
     ]
-    if configuration_list is not None:
-        runner_argv.extend(["--configuration-list", configuration_list])
-    for option, value in (
-        ("--topology-list", args.topology_list),
-        ("--p-list", args.p_list),
-        ("--n-list", args.n_list),
-        ("--max-instances", args.max_instances),
-    ):
-        if value is not None:
-            runner_argv.extend([option, str(value)])
-    if args.screen_size is not None:
-        runner_argv.extend(["--screen-size", str(args.screen_size)])
-    if args.stage == "evaluation":
+    if args.configuration_list is None:
         runner_argv.extend(
-            ["--penalty-constants-json", str(args.penalty_constants_json)]
+            [
+                "--topology-list",
+                args.topology,
+                "--p-list",
+                str(args.p),
+                "--n-list",
+                str(args.n),
+            ]
         )
     else:
-        runner_argv.extend(["--penalty-constant-list", args.penalty_constant_list])
+        runner_argv.extend(["--configuration-list", args.configuration_list])
+    if args.max_instances is not None:
+        runner_argv.extend(["--max-instances", str(args.max_instances)])
+    if args.screen_size is not None:
+        runner_argv.extend(["--screen-size", str(args.screen_size)])
+    runner_argv.extend(["--penalty-constant-list", args.penalty_constant_list])
     results_csv = args.results_csv
     if results_csv is None and args.stage == "evaluation":
         # ``*_rep*.csv`` is the default input pattern of the summarizer.  Give

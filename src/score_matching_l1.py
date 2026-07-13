@@ -16,28 +16,12 @@ full-matrix convention rather than a unique-upper-triangle convention.
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from typing import Any
 
 import numpy as np
 from numba import njit
 
 from .score_matching_miqp import centered_sample_covariance, complete_edge_list
-
-
-@dataclass(frozen=True)
-class ScoreMatchingL1Solution:
-    """Result of the highscore-compatible coordinate-descent calculation."""
-
-    sample_covariance: np.ndarray
-    edge_list: tuple[tuple[int, int], ...]
-    beta: np.ndarray
-    precision: np.ndarray
-    adjacency: np.ndarray
-    objective: float
-    iterations: int
-    converged: bool
-    status: str
-    sweep_change: float
 
 
 @njit
@@ -135,7 +119,7 @@ def solve_score_matching_l1(
     support_tolerance: float = 1e-6,
     divergence_limit: float = 1e12,
     verbose: bool = False,
-) -> ScoreMatchingL1Solution:
+) -> dict[str, Any]:
     """Fit the authors' Gaussian L1 score-matching estimator.
 
     ``lambda_value`` multiplies the sum over all ordered off-diagonal entries,
@@ -190,15 +174,15 @@ def solve_score_matching_l1(
             flush=True,
         )
 
-    return ScoreMatchingL1Solution(
-        sample_covariance=sample_covariance,
-        edge_list=tuple(edges),
-        beta=beta,
-        precision=precision,
-        adjacency=adjacency,
-        objective=objective,
-        iterations=iterations,
-        converged=converged,
-        status=status,
-        sweep_change=float(sweep_change),
-    )
+    return {
+        "sample_covariance": sample_covariance,
+        "edge_list": tuple(edges),
+        "beta": beta,
+        "precision": precision,
+        "adjacency": adjacency,
+        "objective": objective,
+        "iterations": iterations,
+        "converged": converged,
+        "status": status,
+        "sweep_change": float(sweep_change),
+    }

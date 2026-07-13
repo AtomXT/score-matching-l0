@@ -36,7 +36,7 @@ OUTPUT_COLUMNS = (
     "shd_mean",
     "shd_se",
 )
-CERTIFICATION_METHODS = frozenset({"sm_l0", "graphl0"})
+CERTIFICATION_METHODS = frozenset({"sm_l0", "sm_l0_core", "graphl0"})
 
 
 def parse_args() -> argparse.Namespace:

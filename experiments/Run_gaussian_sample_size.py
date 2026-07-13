@@ -11,25 +11,34 @@ if __package__ in {None, ""}:
     sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from experiments.primary_panel_workflow import (
-    DEFAULT_CONSTANTS_FILE,
     OUTPUT_ROOT,
     run_panel,
 )
 
 
 def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
-    parser = argparse.ArgumentParser(description=__doc__)
+    parser = argparse.ArgumentParser(
+        description=__doc__,
+        formatter_class=argparse.ArgumentDefaultsHelpFormatter,
+    )
     parser.add_argument("--stage", choices=["local_check", "evaluation"], default="local_check")
     parser.add_argument("--job-name", default="sample_size_local_check")
     parser.add_argument("--rep-list", default="0")
     parser.add_argument("--configuration-list", default=None)
-    parser.add_argument("--topology-list", default=None)
-    parser.add_argument("--p-list", default=None)
-    parser.add_argument("--n-list", default=None)
+    parser.add_argument("--topology", default="erdos_renyi", help="Graph topology.")
+    parser.add_argument("--p", type=int, default=40, help="Problem dimension.")
+    parser.add_argument("--n", type=int, default=20, help="Sample size.")
     parser.add_argument("--max-instances", type=int, default=None)
-    parser.add_argument("--method-list", default="sm_l1")
-    parser.add_argument("--penalty-constant-list", default="1")
-    parser.add_argument("--penalty-constants-json", type=Path, default=DEFAULT_CONSTANTS_FILE)
+    parser.add_argument(
+        "--method-list",
+        default="sm_l1",
+        help="Methods: sm_l0, sm_l0_core, sm_l1, graphl0, or glasso.",
+    )
+    parser.add_argument(
+        "--penalty-constant-list",
+        default="1",
+        help="Comma-separated penalty constants.",
+    )
     parser.add_argument("--candidate-rule", choices=["complete", "correlation"], default="complete")
     parser.add_argument("--screen-size", type=int, default=None)
     parser.add_argument("--time-limit", type=float, default=30.0)
