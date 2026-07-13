@@ -21,8 +21,6 @@ def parse_list(text: str, cast: Callable[[str], T]) -> list[T]:
     if cleaned.startswith("[") and cleaned.endswith("]"):
         cleaned = cleaned[1:-1]
     values = [part.strip() for part in cleaned.split(",") if part.strip()]
-    if not values:
-        raise ValueError("list arguments must contain at least one value")
     return [cast(value) for value in values]
 
 
@@ -101,8 +99,6 @@ def support_metrics(truth: np.ndarray, estimate: np.ndarray) -> dict[str, float]
     estimate = estimate | estimate.T
     np.fill_diagonal(truth, False)
     np.fill_diagonal(estimate, False)
-    if truth.shape != estimate.shape:
-        raise ValueError("truth and estimate must have the same shape")
 
     upper = np.triu(np.ones(truth.shape, dtype=bool), k=1)
     y = truth[upper]
@@ -151,13 +147,20 @@ def heldout_scores(x: np.ndarray, precision: np.ndarray) -> dict[str, float]:
     covariance = centered.T @ centered / centered.shape[0]
     with np.errstate(over="ignore", invalid="ignore", divide="ignore"):
         score = 0.5 * np.trace(precision @ covariance @ precision) - np.trace(precision)
-        sign, logdet = np.linalg.slogdet(precision)
         trace_term = np.trace(covariance @ precision)
-    nll = (
-        0.5 * (trace_term - logdet)
-        if sign > 0 and np.isfinite(logdet) and np.isfinite(trace_term)
-        else np.nan
-    )
+    # A positive determinant does not imply positive definiteness: a symmetric
+    # matrix can have an even number of negative eigenvalues.  Cholesky is the
+    # appropriate gate before interpreting the matrix as a Gaussian precision.
+    try:
+        cholesky = np.linalg.cholesky(precision)
+        logdet = 2.0 * np.log(np.diag(cholesky)).sum()
+        nll = (
+            0.5 * (trace_term - logdet)
+            if np.isfinite(logdet) and np.isfinite(trace_term)
+            else np.nan
+        )
+    except np.linalg.LinAlgError:
+        nll = np.nan
     return {"heldout_score": float(score), "heldout_gaussian_nll": float(nll)}
 
 
@@ -167,8 +170,6 @@ def correlation_screen(x: np.ndarray, number_of_edges: int) -> list[tuple[int, i
     total = p * (p - 1) // 2
     if number_of_edges >= total:
         return [(i, j) for i in range(p) for j in range(i + 1, p)]
-    if number_of_edges <= 0:
-        raise ValueError("number_of_edges must be positive")
 
     correlation = np.corrcoef(x, rowvar=False)
     pairs = [(i, j) for i in range(p) for j in range(i + 1, p)]

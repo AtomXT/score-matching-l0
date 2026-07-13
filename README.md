@@ -7,6 +7,9 @@ workflow is organized as a reproducible generate--fit--summarize pipeline.
 ## Project layout
 
 - `src/` contains the score-matching estimators and solver adapters.
+- `src/sm_l1/` preserves the authors' uploaded R implementation as reference
+  material; the registered SM--L1 estimator is the independent Python module
+  `src/score_matching_l1.py`.
 - `src/l0bnb2/` contains the bundled GraphL0Learn comparison implementation.
 - `experiments/` contains reusable simulation models, data-generation entry
   points, estimator runners, and Quest job files.
@@ -28,53 +31,49 @@ python3 -m venv .venv
 .venv/bin/python -m pip install -r requirements.txt
 ```
 
-Gurobi and a valid license are required for the MIQP estimators. The L1
-score-matching estimator and data generators do not require Gurobi.
+Gurobi and a valid license are required for the MIQP estimators. The active L1
+score-matching estimator is implemented in Python/Numba and, like the data
+generators, requires neither Gurobi nor R.
 
-## Generate experiment instances
+## Generate the registered experiment instances
 
 From the project root:
 
 ```bash
-.venv/bin/python -m experiments.generate_gaussian_experiments \
-  --study local_example \
-  --topology-list chain,erdos_renyi \
-  --p-list 20 \
-  --n-list 40,100 \
-  --degree-list 4 \
-  --signal-list 0.2 \
-  --condition-list 10 \
-  --rep-list 0,1
+.venv/bin/python experiments/generate_primary_graph_recovery_data.py
 ```
 
-Instances are written under `data/gaussian_experiments/<study>/`. Reusable
-graph and precision-matrix constructions are defined in
-`experiments/gaussian_models.py`; this module also retains the
-lattice-with-hubs design of Lin, Drton, and Shojaie (2016).
+The 70 registered instances are written under
+`data/gaussian_experiments/primary_graph_recovery/`.  Fitting programs and
+Quest jobs only read these saved instances; they never generate data.
 
-## Fit the estimators
+## Run a fitting runner directly
 
 ```bash
-.venv/bin/python -m experiments.Run_gaussian_experiments \
-  --study local_example \
-  --method-list sm_l0,sm_l1 \
-  --penalty-multiplier-list 0.25,0.5,1,2,4 \
-  --time-limit 600 \
-  --mip-gap 0.01 \
-  --threads 8 \
-  --job-name local_example \
-  --overwrite-results
+.venv/bin/python experiments/Run_gaussian_sample_size.py
 ```
 
-Raw results are written to `experiments_results/`. Each fitted method uses the
-same saved instance and candidate-edge set.
+The runner's command-line arguments have defaults: this invocation loads one
+existing panel instance and fits SM--L1 at one constant.  Run it with `--help`
+to see the settings you can change.  It creates no dataset and does not require
+Gurobi.
 
-## Summarize results
+## Run and summarize the full study
+
+The full workflow first calibrates one transferable constant per method on the
+smallest-dimensional configuration and then evaluates all other configurations
+without retuning.  On Quest, submit the dependency-aware workflow with:
+
+```bash
+bash experiments/quest_jobs/gaussian_support_recovery/submit_all.sh
+```
+
+After evaluation finishes:
 
 ```bash
 .venv/bin/python analysis/summarize_gaussian_experiments.py \
-  --study local_example
+  --study primary_graph_recovery
 ```
 
-The summary contains Monte Carlo means and standard errors for the requested
-support-recovery, estimation, predictive-score, and computational metrics.
+The statistical CSV is intentionally compact.  Detailed solver diagnostics and
+run metadata are written to linked JSONL and JSON files.

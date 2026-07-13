@@ -24,39 +24,44 @@ else:
     PROJECT_DIR = Path(__file__).resolve().parents[1]
 
 from experiments.generate_gaussian_experiments import generate_one
+from experiments.primary_graph_recovery_config import (
+    CALIBRATION_CONFIGURATION,
+    NUMBER_OF_REPLICATIONS,
+    PANEL_SETTINGS as REGISTERED_PANEL_SETTINGS,
+)
 
 
 STUDY = "primary_graph_recovery"
 OUTPUT_ROOT = PROJECT_DIR / "data" / "gaussian_experiments"
 BASE_SEED = 2027
-NUMBER_OF_REPLICATIONS = 10
 TARGET_DEGREE = 4
 TARGET_SIGNAL = 0.20
 TARGET_CONDITION = 10.0
 OVERWRITE_EXISTING = False
 
-# Panel A varies n at p=40. Panel B varies p at n=2p. Panel C adds a
-# scale-free graph at the shared central setting.  The dictionary construction
-# removes the repeated Erd--Renyi configuration (p, n)=(40, 80).
+
+def _setting(configuration: tuple[str, int, int]) -> dict[str, int | str]:
+    topology, p, n = configuration
+    return {"topology": topology, "p": p, "n": n}
+
+
+CALIBRATION_SETTING = _setting(CALIBRATION_CONFIGURATION)
 PANEL_SETTINGS = {
-    "sample_size": [
-        {"topology": "erdos_renyi", "p": 40, "n": n}
-        for n in (20, 40, 80, 160)
-    ],
-    "dimension": [
-        {"topology": "erdos_renyi", "p": p, "n": 2 * p}
-        for p in (20, 40, 60)
-    ],
-    "topology": [
-        {"topology": "erdos_renyi", "p": 40, "n": 80},
-        {"topology": "scale_free", "p": 40, "n": 80},
-    ],
+    panel: [_setting(configuration) for configuration in configurations]
+    for panel, configurations in REGISTERED_PANEL_SETTINGS.items()
 }
 
 
 def unique_settings() -> list[dict[str, int | str]]:
     """Return the seven configurations without repeated panel entries."""
-    unique: dict[tuple[str, int, int], dict[str, int | str]] = {}
+    calibration_key = (
+        str(CALIBRATION_SETTING["topology"]),
+        int(CALIBRATION_SETTING["p"]),
+        int(CALIBRATION_SETTING["n"]),
+    )
+    unique: dict[tuple[str, int, int], dict[str, int | str]] = {
+        calibration_key: CALIBRATION_SETTING
+    }
     for settings in PANEL_SETTINGS.values():
         for setting in settings:
             key = (str(setting["topology"]), int(setting["p"]), int(setting["n"]))
@@ -112,6 +117,7 @@ def generate_all(
         "target_degree": TARGET_DEGREE,
         "target_signal": TARGET_SIGNAL,
         "target_condition": TARGET_CONDITION,
+        "calibration_setting": CALIBRATION_SETTING,
         "panels": PANEL_SETTINGS,
         "unique_settings": settings,
     }
@@ -137,10 +143,6 @@ def generate_panel(
     manifest_name: str | None = None,
 ) -> list[dict[str, object]]:
     """Generate one manuscript panel and write a panel-specific manifest."""
-    if panel not in PANEL_SETTINGS:
-        choices = ", ".join(sorted(PANEL_SETTINGS))
-        raise ValueError(f"unknown panel {panel!r}; choose one of {choices}")
-
     replication_ids = list(replications)
     records: list[dict[str, object]] = []
     for setting in PANEL_SETTINGS[panel]:

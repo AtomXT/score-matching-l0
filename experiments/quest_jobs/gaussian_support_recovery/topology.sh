@@ -1,6 +1,7 @@
 #!/bin/bash
-# Run all ten replications of the primary topology panel.
-# Each array task handles exactly one replication.
+# Evaluate all ten replications of the primary topology panel.
+# Each array task handles exactly one replication.  Generate the datasets and
+# select the penalty constants before submitting this job.
 # Confirm the p32811 account and python39 environment before submission.
 # This resource request is provisional; revise it after checking a pilot with seff.
 #SBATCH --account=p32811
@@ -24,16 +25,13 @@ module load gurobi
 
 REPLICATION="${SLURM_ARRAY_TASK_ID}"
 
-python3 -u -m experiments.generate_gaussian_topology_data \
-  --rep-list "${REPLICATION}" \
-  --manifest-name "manifest_topology_rep${REPLICATION}"
-
 python3 -u -m experiments.Run_gaussian_topology \
+  --stage "evaluation" \
   --rep-list "${REPLICATION}" \
   --job-name "topology" \
   --results-csv "experiments_results/gaussian_primary_graph_recovery_topology_rep${REPLICATION}.csv" \
   --method-list "sm_l0,sm_l1,graphl0,glasso" \
-  --penalty-multiplier-list "0.03125,0.044,0.0625,0.088,0.125,0.177,0.25,0.354,0.5,0.707,1,1.414,2,2.828,4" \
+  --penalty-constants-json "experiments_results/penalty_calibration/selected_constants.json" \
   --time-limit "600" \
   --mip-gap "0.01" \
   --threads "8" \

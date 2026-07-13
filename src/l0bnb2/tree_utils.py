@@ -33,8 +33,6 @@ def branch(current_node, tol, branching_type):
     if branching_type == 'maxfrac':
         branching_variable = \
             max_fraction_branching(current_node.z, tol)
-    else:
-        raise ValueError(f'branching type {branching_type} is not supported')
     new_zlb, new_zub = new_z(current_node, branching_variable)
     right_ws = dict()
     right_ws['support'] = current_node.support.copy()

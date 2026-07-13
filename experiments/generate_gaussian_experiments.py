@@ -40,9 +40,6 @@ def generate_one(
     fixed_graph: bool = False,
 ) -> dict[str, object]:
     """Generate and save one population model and three independent samples."""
-    if topology not in TOPOLOGY_CODES:
-        raise ValueError(f"unsupported topology: {topology}")
-
     graph_rep = 0 if fixed_graph else rep
     topology_code = TOPOLOGY_CODES[topology]
     # Excluding n, signal, and condition pairs factor levels through a common

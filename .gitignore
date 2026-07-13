@@ -1,5 +1,5 @@
 .DS_Store
-.DS_Store
+.Rapp.history
 __pycache__/
 .pytest_cache/
 *.pyc
@@ -18,3 +18,9 @@ references/
 paper/
 .idea/
 experiments_results/
+*local_check*
+
+# Author-supplied SM--L1 files have no stated redistribution license.  Keep
+# them as local provenance material; track only our explanatory README.
+src/sm_l1
+!src/sm_l1/README.md

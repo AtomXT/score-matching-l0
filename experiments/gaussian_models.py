@@ -16,8 +16,6 @@ def chain_graph(p: int) -> np.ndarray:
 def lattice_graph(p: int) -> np.ndarray:
     """Return a four-neighbor square lattice on ``p`` vertices."""
     side = int(round(np.sqrt(p)))
-    if side * side != p:
-        raise ValueError("lattice topology requires p to be a perfect square")
     adjacency = np.zeros((p, p), dtype=bool)
     for row in range(side):
         for column in range(side):
@@ -41,8 +39,6 @@ def banded_graph(p: int, target_degree: int) -> np.ndarray:
 
 def hub_graph(p: int, target_degree: int) -> np.ndarray:
     """Return a connected graph with one vertex of the requested degree."""
-    if not (2 <= target_degree < p):
-        raise ValueError("hub target_degree must be between 2 and p - 1")
     adjacency = chain_graph(p)
     for neighbor in range(2, target_degree + 1):
         adjacency[0, neighbor] = True
@@ -54,8 +50,6 @@ def erdos_renyi_graph(
     p: int, target_degree: int, rng: np.random.Generator
 ) -> np.ndarray:
     """Return a connected sparse Erdos--Renyi-type graph."""
-    if target_degree < 2:
-        raise ValueError("connected Erdos--Renyi graphs require target_degree >= 2")
     adjacency = np.zeros((p, p), dtype=bool)
     order = rng.permutation(p)
     for position in range(1, p):
@@ -111,10 +105,7 @@ def build_graph(
         "erdos_renyi": lambda: erdos_renyi_graph(p, target_degree, rng),
         "scale_free": lambda: scale_free_graph(p, target_degree, rng),
     }
-    try:
-        adjacency = builders[topology]()
-    except KeyError as exc:
-        raise ValueError(f"unsupported topology: {topology}") from exc
+    adjacency = builders[topology]()
     np.fill_diagonal(adjacency, False)
     return adjacency
 
@@ -146,11 +137,6 @@ def calibrated_precision(
     rng: np.random.Generator,
 ) -> tuple[np.ndarray, dict[str, float | np.ndarray]]:
     """Calibrate edge heterogeneity and the spectral condition number."""
-    if not (0 < target_signal < 1):
-        raise ValueError("target_signal must lie strictly between zero and one")
-    if target_condition <= 1:
-        raise ValueError("target_condition must be greater than one")
-
     p = adjacency.shape[0]
     signs = np.zeros((p, p), dtype=float)
     uniforms = np.zeros((p, p), dtype=float)
@@ -203,16 +189,12 @@ def lattice_with_hubs_graph(
         hub_set = set(hubs)
         for hub in hubs:
             neighbors = set(np.flatnonzero(adjacency[hub]))
-            if len(neighbors) > hub_degree:
-                raise ValueError("hub_degree is below the selected hub's lattice degree")
             candidates = [
                 node
                 for node in range(start, stop)
                 if node != hub and node not in neighbors and node not in hub_set
             ]
             number_to_add = hub_degree - len(neighbors)
-            if number_to_add > len(candidates):
-                raise ValueError("hub_degree is too large for the component")
             added = rng.choice(candidates, size=number_to_add, replace=False)
             adjacency[hub, added] = adjacency[added, hub] = True
     return adjacency
@@ -260,10 +242,6 @@ def generate_exact_edge_gaussian(
     diagonal_buffer: float = 0.5,
 ) -> tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
     """Generate a connected Gaussian graph with an exact number of edges."""
-    maximum_edges = p * (p - 1) // 2
-    if not (p - 1 <= number_of_edges <= maximum_edges):
-        raise ValueError("number_of_edges must lie between p - 1 and p(p - 1)/2")
-
     rng = np.random.default_rng(seed)
     adjacency = np.zeros((p, p), dtype=bool)
     order = rng.permutation(p)

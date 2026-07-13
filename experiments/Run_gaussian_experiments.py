@@ -1,19 +1,21 @@
 #!/usr/bin/env python3
-"""Run Gaussian score-matching methods on saved experiment instances.
+"""Run Gaussian graph-recovery methods on saved experiment instances.
 
-The driver deliberately does not generate data.  It loads the instances created
-by ``generate_gaussian_experiments.py``, applies one common candidate-edge set to
-all compatible methods, and appends one CSV row after every method--penalty fit.
+This driver never generates data.  Calibration runs fit every requested method
+over a common grid of penalty constants.  Evaluation runs load one previously
+selected constant per method and keep that constant fixed across instances.
 """
 
 from __future__ import annotations
 
 import argparse
+import json
 import math
 import os
 import platform
 import time
 import traceback
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
@@ -22,88 +24,46 @@ import numpy as np
 from experiments.common import (
     append_result,
     correlation_screen,
-    estimation_metrics,
-    heldout_scores,
     load_instance,
     parse_list,
     support_metrics,
 )
+from experiments.penalty_rates import (
+    PENALTY_RATE_LABELS,
+    load_selected_constants,
+    penalty_value,
+)
 from src import score_matching_l1, score_matching_miqp
-from src.graphl0_adapter import fit_graph_l0_bnb
 
 
 PROJECT_DIR = Path(__file__).resolve().parents[1]
 
 
 RESULT_COLUMNS = [
+    "stage",
     "study",
     "job_name",
-    "instance_dir",
+    "instance_id",
     "topology",
     "p",
     "n",
-    "target_degree",
-    "achieved_average_degree",
-    "achieved_maximum_degree",
-    "target_signal",
-    "achieved_signal",
-    "target_condition",
-    "achieved_condition",
-    "condition_before_standardization",
-    "signal_calibration_error",
-    "minimum_eigenvalue",
     "rep",
-    "graph_mode",
-    "graph_rep",
-    "graph_seed",
-    "sample_seed",
     "method",
-    "python_version",
-    "numpy_version",
-    "gurobi_version",
-    "host",
-    "slurm_job_id",
-    "slurm_array_task_id",
-    "threads",
-    "time_limit",
-    "mip_gap_target",
-    "candidate_rule",
-    "candidate_edges",
-    "candidate_recall",
-    "penalty_multiplier",
+    "penalty_constant",
     "penalty_rate",
     "lambda",
     "status",
+    "fit_available",
     "certified",
     "runtime_seconds",
-    "objective",
-    "objective_bound",
-    "absolute_gap",
-    "relative_gap",
-    "nodes",
-    "big_m_min",
-    "big_m_max",
-    "iterations",
-    "convergence_gap",
     "TP",
     "FP",
-    "TN",
     "FN",
-    "selected_edges",
-    "true_edges",
-    "exact_recovery",
-    "shd",
     "TPR",
     "FPR",
-    "precision",
-    "recall",
     "F1",
-    "MCC",
-    "relative_frobenius_error",
-    "operator_error",
-    "max_entry_error",
-    "heldout_score",
-    "heldout_gaussian_nll",
+    "exact_recovery",
+    "shd",
     "error_message",
 ]
 
@@ -112,8 +72,27 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--study", required=True)
     parser.add_argument("--job-name", default="local_test")
+    parser.add_argument(
+        "--stage",
+        choices=["calibration", "evaluation", "local_check"],
+        default="evaluation",
+        help=(
+            "Calibration and local-check runs use the supplied constant grid; "
+            "evaluation loads one calibrated constant per method from JSON."
+        ),
+    )
     parser.add_argument("--method-list", default="sm_l0,sm_l1")
-    parser.add_argument("--penalty-multiplier-list", default="0.25,0.5,1,2,4")
+    parser.add_argument(
+        "--penalty-constant-list",
+        default=None,
+        help="Comma-separated constants for calibration/local-check runs.",
+    )
+    parser.add_argument(
+        "--penalty-constants-json",
+        type=Path,
+        default=None,
+        help="Selected-constant JSON required for an evaluation run.",
+    )
     parser.add_argument("--rep-list", default=None)
     parser.add_argument("--topology-list", default=None)
     parser.add_argument("--p-list", default=None)
@@ -128,10 +107,11 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser.add_argument("--screen-size", type=int, default=None)
     parser.add_argument("--time-limit", type=float, default=3600.0)
     parser.add_argument("--mip-gap", type=float, default=0.01)
-    parser.add_argument("--big-m-scale", type=float, default=1.25)
+    parser.add_argument("--big-m-init", type=float, default=1000.0)
     parser.add_argument("--threads", type=int, default=8)
-    parser.add_argument("--l1-max-iter", type=int, default=20_000)
-    parser.add_argument("--l1-tolerance", type=float, default=1e-8)
+    parser.add_argument("--l1-max-iter", type=int, default=5_000)
+    parser.add_argument("--l1-tolerance", type=float, default=1e-6)
+    parser.add_argument("--l1-support-tolerance", type=float, default=1e-6)
     parser.add_argument("--graphl0-l2", type=float, default=0.05)
     parser.add_argument("--graphl0-m-bound", type=float, default=100.0)
     parser.add_argument("--glasso-max-iter", type=int, default=1_000)
@@ -143,16 +123,24 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         type=Path,
         default=PROJECT_DIR / "data" / "gaussian_experiments",
     )
+    parser.add_argument("--results-csv", type=Path, default=None)
     parser.add_argument(
-        "--results-csv",
+        "--diagnostics-jsonl",
         type=Path,
         default=None,
+        help="Optional path for per-fit solver diagnostics.",
+    )
+    parser.add_argument(
+        "--run-manifest",
+        type=Path,
+        default=None,
+        help="Optional path for the run arguments and compute environment.",
     )
     return parser.parse_args(argv)
 
 
 def environment_record(args: argparse.Namespace) -> dict[str, Any]:
-    """Record the software and compute environment attached to every result row."""
+    """Return software and scheduler information recorded once per run."""
     try:
         import gurobipy as gp
 
@@ -185,8 +173,6 @@ def candidate_edges(
     if rule == "complete":
         edges = [(i, j) for i in range(p) for j in range(i + 1, p)]
     else:
-        if screen_size is None:
-            raise ValueError("--screen-size is required for correlation screening")
         edges = correlation_screen(x, min(screen_size, total))
     true_edges = {(i, j) for i in range(p) for j in range(i + 1, p) if truth[i, j]}
     retained = len(true_edges.intersection(edges))
@@ -194,48 +180,23 @@ def candidate_edges(
     return edges, recall
 
 
-def penalty_value(method: str, multiplier: float, r: int, n: int) -> tuple[float, str]:
-    """Return the theory-motivated penalty scale for a method.
-
-    Subset selection uses a squared-noise penalty of order log(r) / n, whereas
-    the coefficientwise L1 penalty is on the score scale sqrt(log(r) / n).
-    """
-    if method in {"sm_l1", "glasso"}:
-        return multiplier * math.sqrt(math.log(r) / n), "sqrt(log(r)/n)"
-    return multiplier * math.log(r) / n, "log(r)/n"
-
-
-def _solution_metrics(
+def _support_metrics(
     arrays: dict[str, np.ndarray],
     adjacency: np.ndarray,
-    precision: np.ndarray,
 ) -> dict[str, float]:
-    return {
-        **support_metrics(arrays["adjacency"], adjacency),
-        **estimation_metrics(arrays["precision"], precision),
-        **heldout_scores(arrays["X_test"], precision),
-    }
+    """Return only the graph-recovery measures used in this experiment."""
+    return support_metrics(arrays["adjacency"], adjacency)
 
 
 def standardize_instance(arrays: dict[str, np.ndarray]) -> dict[str, np.ndarray]:
-    """Standardize all splits using training-sample quantities.
-
-    The transformed population precision is returned as well, so matrix-error
-    calculations remain on the same scale as the fitted estimators.
-    """
+    """Standardize every sample split using training-sample quantities."""
     train = np.asarray(arrays["X_train"], dtype=float)
     location = train.mean(axis=0)
     scale = train.std(axis=0, ddof=0)
-    if np.any(scale <= np.finfo(float).eps):
-        raise ValueError("every training variable must have positive empirical variance")
 
     transformed = dict(arrays)
     for name in ("X", "X_train", "X_validation", "X_test"):
         transformed[name] = (np.asarray(arrays[name], dtype=float) - location) / scale
-    scale_matrix = np.diag(scale)
-    inverse_scale = np.diag(1.0 / scale)
-    transformed["precision"] = scale_matrix @ arrays["precision"] @ scale_matrix
-    transformed["Sigma"] = inverse_scale @ arrays["Sigma"] @ inverse_scale
     return transformed
 
 
@@ -246,13 +207,13 @@ def fit_method(
     lambda_value: float,
     args: argparse.Namespace,
 ) -> dict[str, Any]:
-    """Fit one method and normalize its diagnostics to the common result schema."""
+    """Fit one method and return its graph metrics and solver diagnostics."""
     x = arrays["X_train"]
     if method == "sm_l0":
         solution = score_matching_miqp.solve_score_matching_miqp(
             x,
             lambda_value=lambda_value,
-            big_m_scale=args.big_m_scale,
+            big_m_init=args.big_m_init,
             time_limit=args.time_limit,
             mip_gap=args.mip_gap,
             output_flag=args.verbose,
@@ -262,16 +223,27 @@ def fit_method(
         absolute_gap = solution.objective - solution.objective_bound
         return {
             "status": solution.status,
-            "certified": float(solution.has_solution and solution.mip_gap <= args.mip_gap),
+            "fit_available": float(solution.has_solution),
+            "certified": float(
+                solution.has_solution and solution.mip_gap <= args.mip_gap
+            ),
             "runtime_seconds": solution.runtime_seconds,
             "objective": solution.objective,
             "objective_bound": solution.objective_bound,
             "absolute_gap": absolute_gap,
             "relative_gap": solution.mip_gap,
             "nodes": solution.nodes,
-            "big_m_min": float(solution.big_m.values.min()),
-            "big_m_max": float(solution.big_m.values.max()),
-            **_solution_metrics(arrays, solution.adjacency, solution.precision),
+            "big_m_initial": args.big_m_init,
+            "big_m": solution.big_m,
+            "big_m_relaxation_objective": solution.big_m_relaxation_objective,
+            "big_m_relaxation_runtime_seconds": (
+                solution.big_m_relaxation_runtime_seconds
+            ),
+            **(
+                _support_metrics(arrays, solution.adjacency)
+                if solution.has_solution
+                else {}
+            ),
         }
     if method == "sm_l1":
         start = time.perf_counter()
@@ -279,22 +251,30 @@ def fit_method(
             x,
             lambda_value=lambda_value,
             edge_list=edges,
+            assume_centered=True,
             max_iter=args.l1_max_iter,
             tolerance=args.l1_tolerance,
+            support_tolerance=args.l1_support_tolerance,
+            verbose=args.verbose,
         )
         runtime = time.perf_counter() - start
+        metrics = (
+            _support_metrics(arrays, solution.adjacency) if solution.converged else {}
+        )
         return {
             "status": solution.status,
+            "fit_available": float(solution.converged),
             "certified": "",
             "runtime_seconds": runtime,
             "objective": solution.objective,
             "iterations": solution.iterations,
-            **_solution_metrics(arrays, solution.adjacency, solution.precision),
+            "convergence_metric": "full_sweep_l1_change",
+            "convergence_value": solution.sweep_change,
+            **metrics,
         }
     if method == "graphl0":
-        p = x.shape[1]
-        if len(edges) != p * (p - 1) // 2:
-            raise ValueError("GraphL0 does not support the common screened edge set")
+        from src.graphl0_adapter import fit_graph_l0_bnb
+
         fit = fit_graph_l0_bnb(
             x,
             l0=lambda_value,
@@ -309,20 +289,16 @@ def fit_method(
         np.fill_diagonal(adjacency, False)
         return {
             "status": "ok",
+            "fit_available": 1.0,
             "certified": float(fit["gap"] <= args.mip_gap),
             "runtime_seconds": fit["runtime_seconds"],
             "objective": fit["objective"],
             "relative_gap": fit["gap"],
             "nodes": fit["nodes"],
-            **_solution_metrics(arrays, adjacency, precision),
+            **_support_metrics(arrays, adjacency),
         }
     if method == "glasso":
-        try:
-            from sklearn.covariance import graphical_lasso
-        except ImportError as exc:
-            raise ImportError(
-                "the glasso comparison requires scikit-learn; install requirements.txt"
-            ) from exc
+        from sklearn.covariance import graphical_lasso
 
         start = time.perf_counter()
         centered = x - x.mean(axis=0, keepdims=True)
@@ -336,57 +312,101 @@ def fit_method(
             return_costs=True,
         )
         runtime = time.perf_counter() - start
-        objective, convergence_gap = costs[-1]
-        convergence_gap = float(convergence_gap)
+        objective, dual_gap = costs[-1]
+        dual_gap = float(dual_gap)
+        converged = abs(dual_gap) <= args.glasso_tolerance
         adjacency = np.abs(precision) > 1e-7
         np.fill_diagonal(adjacency, False)
+        metrics = _support_metrics(arrays, adjacency) if converged else {}
         return {
-            "status": (
-                "converged"
-                if abs(convergence_gap) <= args.glasso_tolerance
-                else "iteration_limit"
-            ),
+            "status": "converged" if converged else "iteration_limit",
+            "fit_available": float(converged),
             "certified": "",
             "runtime_seconds": runtime,
             "objective": float(objective),
             "iterations": len(costs),
-            "convergence_gap": convergence_gap,
-            **_solution_metrics(arrays, adjacency, precision),
+            "convergence_metric": "dual_gap",
+            "convergence_value": dual_gap,
+            **metrics,
         }
-    raise ValueError(f"unsupported method: {method}")
+
+
+def _json_ready(value: Any) -> Any:
+    """Convert paths and NumPy scalars to strict JSON-compatible values."""
+    if isinstance(value, Path):
+        return str(value)
+    if isinstance(value, np.generic):
+        return _json_ready(value.item())
+    if isinstance(value, np.ndarray):
+        return _json_ready(value.tolist())
+    if isinstance(value, float) and not math.isfinite(value):
+        return None
+    if isinstance(value, dict):
+        return {str(key): _json_ready(item) for key, item in value.items()}
+    if isinstance(value, (list, tuple)):
+        return [_json_ready(item) for item in value]
+    return value
+
+
+def _write_json(path: Path, document: dict[str, Any]) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(
+        json.dumps(_json_ready(document), indent=2, sort_keys=True, allow_nan=False) + "\n",
+        encoding="utf-8",
+    )
+
+
+def _append_jsonl(path: Path, record: dict[str, Any]) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    with path.open("a", encoding="utf-8") as file:
+        file.write(json.dumps(_json_ready(record), sort_keys=True, allow_nan=False) + "\n")
+
+
+def _fit_plan(args: argparse.Namespace, methods: list[str]) -> list[tuple[str, float]]:
+    """Construct the method--constant pairs appropriate for the requested stage."""
+    if args.stage == "evaluation":
+        selected = load_selected_constants(args.penalty_constants_json, methods)
+        return [(method, selected[method]) for method in methods]
+
+    constants = parse_list(args.penalty_constant_list, float)
+    return [(method, constant) for method in methods for constant in constants]
+
+
+def _requested_configurations(text: str | None) -> set[tuple[str, int, int]] | None:
+    if text is None:
+        return None
+    configurations: set[tuple[str, int, int]] = set()
+    for specification in text.split(";"):
+        topology, p_text, n_text = specification.split(":")
+        configurations.add((topology, int(p_text), int(n_text)))
+    return configurations
 
 
 def run(args: argparse.Namespace) -> Path:
-    """Run the requested fits and return the result-file path."""
+    """Run the requested fits and return the compact result-file path."""
     methods = parse_list(args.method_list, str)
-    multipliers = parse_list(args.penalty_multiplier_list, float)
-    requested_reps = set(parse_list(args.rep_list, int)) if args.rep_list else None
+    fit_plan = _fit_plan(args, methods)
+    requested_rep_list = parse_list(args.rep_list, int) if args.rep_list else None
+    requested_reps = set(requested_rep_list) if requested_rep_list is not None else None
     requested_topologies = (
         set(parse_list(args.topology_list, str)) if args.topology_list else None
     )
     requested_p = set(parse_list(args.p_list, int)) if args.p_list else None
     requested_n = set(parse_list(args.n_list, int)) if args.n_list else None
-    requested_configurations = None
-    if args.configuration_list:
-        requested_configurations = set()
-        for specification in args.configuration_list.split(";"):
-            topology, p_text, n_text = specification.split(":")
-            requested_configurations.add((topology, int(p_text), int(n_text)))
+    requested_configurations = _requested_configurations(args.configuration_list)
+
     results_csv = args.results_csv or (
         PROJECT_DIR / "experiments_results" / f"gaussian_{args.study}_{args.job_name}.csv"
     )
-    if args.overwrite_results and results_csv.exists():
-        results_csv.unlink()
+    diagnostics_jsonl = args.diagnostics_jsonl or results_csv.with_suffix(
+        ".diagnostics.jsonl"
+    )
+    run_manifest = args.run_manifest or results_csv.with_suffix(".run.json")
 
-    instance_dirs = sorted((args.data_root / args.study).glob("*/dataset.npz"))
-    if not instance_dirs:
-        raise FileNotFoundError(
-            f"No instances found under {args.data_root / args.study}. "
-            "Run experiments.generate_gaussian_experiments first."
-        )
+    dataset_paths = sorted((args.data_root / args.study).glob("*/dataset.npz"))
 
     selected_instances: list[tuple[Path, dict[str, Any]]] = []
-    for dataset_path in instance_dirs:
+    for dataset_path in dataset_paths:
         _, metadata = load_instance(dataset_path.parent)
         if requested_reps is not None and int(metadata["rep"]) not in requested_reps:
             continue
@@ -405,14 +425,38 @@ def run(args: argparse.Namespace) -> Path:
             continue
         selected_instances.append((dataset_path, metadata))
     if args.max_instances is not None:
-        if args.max_instances <= 0:
-            raise ValueError("--max-instances must be positive")
         selected_instances = selected_instances[: args.max_instances]
-    if not selected_instances:
-        raise ValueError("the requested filters selected no experiment instances")
+
+    if args.overwrite_results:
+        for path in (results_csv, diagnostics_jsonl, run_manifest):
+            if path.exists():
+                path.unlink()
+
+    started_at = datetime.now(timezone.utc).isoformat()
+    manifest: dict[str, Any] = {
+        "schema_version": 1,
+        "started_at": started_at,
+        "stage": args.stage,
+        "study": args.study,
+        "job_name": args.job_name,
+        "arguments": vars(args),
+        "environment": environment_record(args),
+        "fit_plan": [
+            {
+                "method": method,
+                "constant": constant,
+                "penalty_rate": PENALTY_RATE_LABELS[method],
+            }
+            for method, constant in fit_plan
+        ],
+        "instance_ids": [dataset_path.parent.name for dataset_path, _ in selected_instances],
+        "results_csv": results_csv,
+        "diagnostics_jsonl": diagnostics_jsonl,
+    }
+    _write_json(run_manifest, manifest)
 
     failures = 0
-    environment = environment_record(args)
+    fits_attempted = 0
     for dataset_path, metadata in selected_instances:
         arrays, _ = load_instance(dataset_path.parent)
         arrays = standardize_instance(arrays)
@@ -422,46 +466,75 @@ def run(args: argparse.Namespace) -> Path:
             rule=args.candidate_rule,
             screen_size=args.screen_size,
         )
-        r = max(2, len(edges))
-        for multiplier in multipliers:
-            for method in methods:
-                lambda_value, penalty_rate = penalty_value(
-                    method,
-                    multiplier,
-                    r,
-                    int(metadata["n"]),
-                )
-                row: dict[str, Any] = {
-                    **metadata,
-                    **environment,
-                    "job_name": args.job_name,
-                    "instance_dir": str(dataset_path.parent),
-                    "method": method,
-                    "candidate_rule": args.candidate_rule,
-                    "candidate_edges": len(edges),
-                    "candidate_recall": screen_recall,
-                    "penalty_multiplier": multiplier,
-                    "penalty_rate": penalty_rate,
-                    "lambda": lambda_value,
-                    "status": "error",
-                    "error_message": "",
-                }
-                try:
-                    row.update(fit_method(method, arrays, edges, lambda_value, args))
-                except Exception as exc:
-                    failures += 1
-                    row["error_message"] = f"{type(exc).__name__}: {exc}"
-                    if args.verbose:
-                        traceback.print_exc()
-                append_result(results_csv, row, RESULT_COLUMNS)
-                print(
-                    f"{metadata['topology']} p={metadata['p']} n={metadata['n']} "
-                    f"rep={metadata['rep']} method={method} c={multiplier:g}: {row['status']}"
-                )
+        for method, constant in fit_plan:
+            lambda_value, penalty_rate = penalty_value(
+                method,
+                constant,
+                int(metadata["p"]),
+                int(metadata["n"]),
+            )
+            identifiers = {
+                "stage": args.stage,
+                "study": args.study,
+                "job_name": args.job_name,
+                "instance_id": dataset_path.parent.name,
+                "topology": metadata["topology"],
+                "p": int(metadata["p"]),
+                "n": int(metadata["n"]),
+                "rep": int(metadata["rep"]),
+                "method": method,
+                "penalty_constant": constant,
+                "penalty_rate": penalty_rate,
+                "lambda": lambda_value,
+            }
+            row: dict[str, Any] = {
+                **identifiers,
+                "status": "error",
+                "fit_available": 0.0,
+                "certified": "",
+                "error_message": "",
+            }
+            fit_output: dict[str, Any] = {}
+            error_traceback = ""
+            try:
+                fit_output = fit_method(method, arrays, edges, lambda_value, args)
+                row.update(fit_output)
+            except Exception as exc:
+                failures += 1
+                row["error_message"] = f"{type(exc).__name__}: {exc}"
+                error_traceback = traceback.format_exc()
+                if args.verbose:
+                    traceback.print_exc()
 
-    print(f"Wrote {results_csv}")
-    if failures:
-        raise SystemExit(f"{failures} fits failed; see error_message in the result file")
+            append_result(results_csv, row, RESULT_COLUMNS)
+            diagnostic_record = {
+                **identifiers,
+                "candidate_rule": args.candidate_rule,
+                "candidate_edges": len(edges),
+                "candidate_recall": screen_recall,
+                "fit": fit_output,
+                "error_message": row["error_message"],
+                "traceback": error_traceback,
+            }
+            _append_jsonl(diagnostics_jsonl, diagnostic_record)
+            fits_attempted += 1
+            print(
+                f"{metadata['topology']} p={metadata['p']} n={metadata['n']} "
+                f"rep={metadata['rep']} method={method} c={constant:g}: {row['status']}",
+                flush=True,
+            )
+
+    manifest.update(
+        {
+            "finished_at": datetime.now(timezone.utc).isoformat(),
+            "fits_attempted": fits_attempted,
+            "fit_failures": failures,
+        }
+    )
+    _write_json(run_manifest, manifest)
+    print(f"Wrote {results_csv}", flush=True)
+    print(f"Wrote {diagnostics_jsonl}", flush=True)
+    print(f"Wrote {run_manifest}", flush=True)
     return results_csv
 
 
