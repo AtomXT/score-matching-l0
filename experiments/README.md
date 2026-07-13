@@ -155,6 +155,10 @@ Slurm tasks.  Task 0 generates and fits replication 0, task 1 handles replicatio
 so on through task 9.  The fixed runner job names are `sample_size`, `dimension`, and
 `topology`; the array index appears only in the replication selector, manifest filename,
 result filename, and log filename.  Thus parallel tasks cannot overwrite one another.
+The Quest commands enable `--verbose`, so the combined Slurm log includes the available
+SM--L0, GraphL0, and graphical-lasso solver progress as well as warnings and final fit
+summaries.  SM--L1 records its final status and iteration count in the result CSV rather
+than printing every FISTA iteration.
 
 The Quest scripts follow the conventions used in the QP_indicator project:
 

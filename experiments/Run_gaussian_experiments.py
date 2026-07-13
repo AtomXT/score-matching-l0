@@ -84,6 +84,7 @@ RESULT_COLUMNS = [
     "big_m_min",
     "big_m_max",
     "iterations",
+    "convergence_gap",
     "TP",
     "FP",
     "TN",
@@ -326,19 +327,30 @@ def fit_method(
         start = time.perf_counter()
         centered = x - x.mean(axis=0, keepdims=True)
         sample_covariance = centered.T @ centered / centered.shape[0]
-        _, precision = graphical_lasso(
+        _, precision, costs = graphical_lasso(
             sample_covariance,
             alpha=lambda_value,
             max_iter=args.glasso_max_iter,
             tol=args.glasso_tolerance,
+            verbose=args.verbose,
+            return_costs=True,
         )
         runtime = time.perf_counter() - start
+        objective, convergence_gap = costs[-1]
+        convergence_gap = float(convergence_gap)
         adjacency = np.abs(precision) > 1e-7
         np.fill_diagonal(adjacency, False)
         return {
-            "status": "converged",
+            "status": (
+                "converged"
+                if abs(convergence_gap) <= args.glasso_tolerance
+                else "iteration_limit"
+            ),
             "certified": "",
             "runtime_seconds": runtime,
+            "objective": float(objective),
+            "iterations": len(costs),
+            "convergence_gap": convergence_gap,
             **_solution_metrics(arrays, adjacency, precision),
         }
     raise ValueError(f"unsupported method: {method}")

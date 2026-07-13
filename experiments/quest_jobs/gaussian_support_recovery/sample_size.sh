@@ -24,11 +24,11 @@ module load gurobi
 
 REPLICATION="${SLURM_ARRAY_TASK_ID}"
 
-python3 -m experiments.generate_gaussian_sample_size_data \
+python3 -u -m experiments.generate_gaussian_sample_size_data \
   --rep-list "${REPLICATION}" \
   --manifest-name "manifest_sample_size_rep${REPLICATION}"
 
-python3 -m experiments.Run_gaussian_sample_size \
+python3 -u -m experiments.Run_gaussian_sample_size \
   --rep-list "${REPLICATION}" \
   --job-name "sample_size" \
   --results-csv "experiments_results/gaussian_primary_graph_recovery_sample_size_rep${REPLICATION}.csv" \
@@ -37,4 +37,5 @@ python3 -m experiments.Run_gaussian_sample_size \
   --time-limit "600" \
   --mip-gap "0.01" \
   --threads "8" \
+  --verbose \
   --overwrite-results

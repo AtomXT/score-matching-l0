@@ -24,11 +24,11 @@ module load gurobi
 
 REPLICATION="${SLURM_ARRAY_TASK_ID}"
 
-python3 -m experiments.generate_gaussian_dimension_data \
+python3 -u -m experiments.generate_gaussian_dimension_data \
   --rep-list "${REPLICATION}" \
   --manifest-name "manifest_dimension_rep${REPLICATION}"
 
-python3 -m experiments.Run_gaussian_dimension \
+python3 -u -m experiments.Run_gaussian_dimension \
   --rep-list "${REPLICATION}" \
   --job-name "dimension" \
   --results-csv "experiments_results/gaussian_primary_graph_recovery_dimension_rep${REPLICATION}.csv" \
@@ -37,4 +37,5 @@ python3 -m experiments.Run_gaussian_dimension \
   --time-limit "600" \
   --mip-gap "0.01" \
   --threads "8" \
+  --verbose \
   --overwrite-results
