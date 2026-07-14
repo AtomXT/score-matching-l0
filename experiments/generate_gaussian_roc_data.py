@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Generate the registered p=500, n=1000 lattice-with-hubs ROC datasets."""
+"""Generate the registered p=500, n=1000 Erdos--Renyi ROC datasets."""
 
 from pathlib import Path
 import sys

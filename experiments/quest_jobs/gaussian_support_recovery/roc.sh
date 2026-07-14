@@ -27,7 +27,7 @@ python3 -u -m experiments.Run_gaussian_roc \
   --stage "evaluation" \
   --rep-list "${REPLICATION}" \
   --job-name "roc" \
-  --topology "lattice_hubs" \
+  --topology "erdos_renyi" \
   --p "500" \
   --n "1000" \
   --method-list "${METHOD}" \

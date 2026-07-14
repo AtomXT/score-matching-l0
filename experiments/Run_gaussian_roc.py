@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Run the p=500, n=1000 lattice-with-hubs ROC experiment."""
+"""Run the p=500, n=1000 Erdos--Renyi ROC experiment."""
 
 from __future__ import annotations
 
@@ -21,7 +21,7 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser.add_argument("--job-name", default="roc_local_check")
     parser.add_argument("--rep-list", default="0")
     parser.add_argument("--configuration-list", default=None)
-    parser.add_argument("--topology", default="lattice_hubs")
+    parser.add_argument("--topology", default="erdos_renyi")
     parser.add_argument("--p", type=int, default=500)
     parser.add_argument("--n", type=int, default=1000)
     parser.add_argument("--max-instances", type=int, default=None)

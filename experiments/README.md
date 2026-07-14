@@ -6,26 +6,11 @@ penalty constant for each method.
 
 ## Data-generating procedure
 
-For a direct comparison with the competing score-matching method, the generator
-implements Section 4.1 of [Lin, Drton, and Shojaie
-(2016)](https://pmc.ncbi.nlm.nih.gov/articles/PMC5476334/):
-
-1. Form five disconnected components, each a 10×10 four-neighbor lattice. The
-   paper used ten such components for `p=1000`; five preserves the construction
-   at the registered `p=500`.
-2. Choose three hubs independently in each component and bring each hub to
-   degree 20.
-3. Draw every directed nonzero entry independently from `Uniform(0.5, 1)`,
-   divide each row by 1.5 times its absolute off-diagonal row sum, average the
-   matrix with its transpose, and set its diagonal to one.
-4. Invert this diagonally dominant matrix and convert the resulting covariance
-   to a correlation matrix.
-5. Draw `n=1000` mean-zero Gaussian observations at `p=500`.
-
-The paper averaged 100 independently generated datasets. This research
-prototype registers ten independent datasets; change
-`NUMBER_OF_REPLICATIONS` in `primary_graph_recovery_config.py` before generation
-if the final study should use 100.
+The main experiment uses ten independently generated connected Erdős–Rényi
+graphs at `p=500` and `n=1000`. Each graph has target average degree 4. Random
+edge signs and magnitudes are calibrated to target minimum partial correlation
+0.20 and precision-matrix condition number 10, after which the covariance is
+standardized and mean-zero Gaussian observations are drawn.
 
 ## Generate the data
 
@@ -44,7 +29,7 @@ python3 experiments/generate_gaussian_roc_data.py
 Both have no-argument defaults and support explicit replication arguments in
 the panel-specific runner. Existing datasets are retained unless `--overwrite`
 is supplied. The saved `design.json`, `manifest.json`, and per-instance metadata
-record the paper procedure and generation seeds.
+record the population targets and generation seeds.
 
 ## Run the penalty path
 
@@ -62,6 +47,7 @@ For example, an SM–L0 evaluation is:
 python3 experiments/Run_gaussian_roc.py \
   --stage evaluation \
   --rep-list 0 \
+  --topology erdos_renyi \
   --p 500 \
   --n 1000 \
   --method-list sm_l0 \
@@ -78,7 +64,7 @@ the current research MIQP. The registered runner therefore gives both
 score-matching methods the same 2,500 edges with largest absolute sample
 correlations. Unscreened edges count as absent in TPR/FPR, and each diagnostics
 record reports `candidate_recall`; this makes the resulting plot a screened ROC
-curve rather than an unrestricted 499,500-edge ROC curve.
+curve rather than an unrestricted 124,750-edge ROC curve.
 
 Each result row includes TPR, FPR, the penalty constant and realized penalty.
 Gurobi fits additionally record the incumbent objective (`UB`), best bound
@@ -92,15 +78,18 @@ Submit one ten-task array for SM–L0 and one for SM–L1:
 bash experiments/quest_jobs/gaussian_support_recovery/submit_all.sh
 ```
 
-After the arrays finish, average TPR/FPR at each penalty point and draw the plot:
+After the arrays finish, average the metrics at each penalty point and draw the
+ROC and precision–recall plots:
 
 ```bash
 python3 analysis/plot_gaussian_roc.py
 ```
 
-This writes `experiments_results/gaussian_roc_summary.csv` and
-`experiments_results/gaussian_roc.png`. Failed fits are excluded; the summary
-reports the number of available replications for each point.
+This writes `experiments_results/gaussian_roc_summary.csv`,
+`experiments_results/gaussian_roc.png`, and
+`experiments_results/gaussian_pr.png`. Failed fits are excluded; the summary
+reports the mean and standard error of TPR, FPR, and precision, together with
+the number of available replications for each point.
 
 ## Single tests
 

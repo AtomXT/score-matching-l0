@@ -43,10 +43,11 @@ From the project root:
 .venv/bin/python experiments/generate_primary_graph_recovery_data.py
 ```
 
-Ten independent `p=500, n=1000` lattice-with-hubs instances are written under
-`data/gaussian_experiments/primary_graph_recovery/`. The construction follows
-Lin, Drton, and Shojaie (2016), Section 4.1. Fitting programs and Quest jobs only
-read these saved instances; they never generate data.
+Ten independent `p=500, n=1000` connected Erdős–Rényi instances are written
+under `data/gaussian_experiments/primary_graph_recovery/`. The registered graph
+has target average degree 4, minimum partial correlation 0.20, and condition
+number 10. Fitting programs and Quest jobs only read these saved instances;
+they never generate data.
 
 ## Run a fitting runner directly
 
@@ -66,7 +67,8 @@ Submit the SM--L0 and SM--L1 ROC arrays:
 bash experiments/quest_jobs/gaussian_support_recovery/submit_all.sh
 ```
 
-After evaluation finishes, build the averaged ROC table and plot:
+After evaluation finishes, build the averaged metric table, ROC plot, and
+precision–recall plot:
 
 ```bash
 .venv/bin/python analysis/plot_gaussian_roc.py

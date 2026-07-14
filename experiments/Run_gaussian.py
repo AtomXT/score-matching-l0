@@ -21,18 +21,18 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser.add_argument("--job-name", default="single_test")
     parser.add_argument("--rep-list", default="0")
     parser.add_argument("--configuration-list", default=None)
-    parser.add_argument("--topology", default="lattice_hubs", help="Saved graph topology.")
-    parser.add_argument("--p", type=int, default=500, help="Problem dimension.")
-    parser.add_argument("--n", type=int, default=1000, help="Sample size.")
+    parser.add_argument("--topology", default="erdos_renyi", help="Saved graph topology.")
+    parser.add_argument("--p", type=int, default=20, help="Problem dimension.")
+    parser.add_argument("--n", type=int, default=400, help="Sample size.")
     parser.add_argument("--max-instances", type=int, default=1)
     parser.add_argument(
         "--method-list",
-        default="sm_l1",
+        default="sm_l0_core",
         help="sm_l0, sm_l0_core, sm_l1, graphl0, or glasso.",
     )
     parser.add_argument(
         "--penalty-constant-list",
-        default="1",
+        default="2.28",
         help="One constant by default; comma-separated values are also accepted.",
     )
     parser.add_argument("--candidate-rule", choices=["complete", "correlation"], default="correlation")

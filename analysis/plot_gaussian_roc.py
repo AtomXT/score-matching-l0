@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Average the registered penalty paths and draw the Gaussian ROC plot."""
+"""Average the registered penalty paths and draw ROC and PR curves."""
 
 from __future__ import annotations
 
@@ -38,8 +38,14 @@ def main() -> None:
         type=Path,
         default=PROJECT_DIR / "experiments_results/gaussian_roc.png",
     )
+    parser.add_argument(
+        "--pr-plot-path",
+        type=Path,
+        default=PROJECT_DIR / "experiments_results/gaussian_pr.png",
+    )
     parser.add_argument("--p", type=int, default=500)
     parser.add_argument("--n", type=int, default=1000)
+    parser.add_argument("--topology", default="erdos_renyi")
     args = parser.parse_args()
 
     fits = {}
@@ -51,14 +57,17 @@ def main() -> None:
                     and row["fit_available"] == "1.0"
                     and int(row["p"]) == args.p
                     and int(row["n"]) == args.n
+                    and row["topology"] == args.topology
                 ):
                     key = (row["method"], float(row["penalty_constant"]), int(row["rep"]))
                     fits[key] = row
 
     groups = defaultdict(list)
     for (method, constant, _), row in fits.items():
+        tp, fp = int(row["TP"]), int(row["FP"])
+        precision = tp / (tp + fp) if tp + fp else 1.0
         groups[(method, constant, row["penalty_rate"])].append(
-            (float(row["FPR"]), float(row["TPR"]))
+            (float(row["FPR"]), float(row["TPR"]), precision)
         )
 
     summary = []
@@ -75,6 +84,8 @@ def main() -> None:
                 "se_FPR": array[:, 0].std(ddof=1) / np.sqrt(count) if count > 1 else 0.0,
                 "mean_TPR": array[:, 1].mean(),
                 "se_TPR": array[:, 1].std(ddof=1) / np.sqrt(count) if count > 1 else 0.0,
+                "mean_precision": array[:, 2].mean(),
+                "se_precision": array[:, 2].std(ddof=1) / np.sqrt(count) if count > 1 else 0.0,
             }
         )
 
@@ -82,6 +93,7 @@ def main() -> None:
     columns = list(summary[0]) if summary else [
         "method", "penalty_constant", "penalty_rate", "replications",
         "mean_FPR", "se_FPR", "mean_TPR", "se_TPR",
+        "mean_precision", "se_precision",
     ]
     with args.summary_csv.open("w", newline="", encoding="utf-8") as file:
         writer = csv.DictWriter(file, fieldnames=columns)
@@ -116,8 +128,37 @@ def main() -> None:
     fig.tight_layout()
     args.plot_path.parent.mkdir(parents=True, exist_ok=True)
     fig.savefig(args.plot_path, dpi=200)
+
+    fig, axis = plt.subplots(figsize=(6.2, 5.2))
+    for method in sorted({row["method"] for row in summary}):
+        points = sorted(
+            (row["mean_TPR"], row["mean_precision"])
+            for row in summary
+            if row["method"] == method
+        )
+        recall, precision = np.asarray(points).T
+        axis.plot(
+            recall,
+            precision,
+            marker="o",
+            linewidth=2,
+            markersize=4,
+            label=labels.get(method, method),
+        )
+    axis.set(
+        xlabel="Recall",
+        ylabel="Precision",
+        xlim=(0, 1.02),
+        ylim=(0, 1.02),
+    )
+    axis.grid(alpha=0.25)
+    axis.legend(frameon=False)
+    fig.tight_layout()
+    args.pr_plot_path.parent.mkdir(parents=True, exist_ok=True)
+    fig.savefig(args.pr_plot_path, dpi=200)
     print(f"Wrote {args.summary_csv}")
     print(f"Wrote {args.plot_path}")
+    print(f"Wrote {args.pr_plot_path}")
 
 
 if __name__ == "__main__":

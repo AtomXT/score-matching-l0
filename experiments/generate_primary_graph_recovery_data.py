@@ -31,9 +31,7 @@ from experiments.primary_graph_recovery_config import (
 STUDY = "primary_graph_recovery"
 OUTPUT_ROOT = PROJECT_DIR / "data" / "gaussian_experiments"
 BASE_SEED = 2027
-# The generic generator requires these arguments, but the registered
-# lattice-with-hubs branch follows Lin et al. directly and does not calibrate
-# its population to them.
+# Registered Erdos--Renyi population targets.
 TARGET_DEGREE = 4
 TARGET_SIGNAL = 0.20
 TARGET_CONDITION = 10.0
@@ -106,8 +104,10 @@ def generate_all(
         "number_of_replications": len(replication_ids),
         "number_of_instances": len(records),
         "base_seed": BASE_SEED,
-        "data_generation": "Lin, Drton, and Shojaie (2016), Section 4.1; five components for p=500",
-        "paper_url": "https://pmc.ncbi.nlm.nih.gov/articles/PMC5476334/",
+        "data_generation": "connected Erdos--Renyi graph with calibrated precision",
+        "target_degree": TARGET_DEGREE,
+        "target_signal": TARGET_SIGNAL,
+        "target_condition": TARGET_CONDITION,
         "panels": PANEL_SETTINGS,
         "unique_settings": settings,
     }
