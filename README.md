@@ -35,7 +35,7 @@ Gurobi and a valid license are required for the MIQP estimators. The active L1
 score-matching estimator is implemented in Python/Numba and, like the data
 generators, requires neither Gurobi nor R.
 
-## Generate the registered experiment instances
+## Generate the registered ROC instances
 
 From the project root:
 
@@ -43,37 +43,35 @@ From the project root:
 .venv/bin/python experiments/generate_primary_graph_recovery_data.py
 ```
 
-The 60 registered instances are written under
-`data/gaussian_experiments/primary_graph_recovery/`.  Fitting programs and
-Quest jobs only read these saved instances; they never generate data.
+Ten independent `p=500, n=1000` lattice-with-hubs instances are written under
+`data/gaussian_experiments/primary_graph_recovery/`. The construction follows
+Lin, Drton, and Shojaie (2016), Section 4.1. Fitting programs and Quest jobs only
+read these saved instances; they never generate data.
 
 ## Run a fitting runner directly
 
 ```bash
-.venv/bin/python experiments/Run_gaussian_sample_size.py
+.venv/bin/python experiments/Run_gaussian.py
 ```
 
-The runner's command-line arguments have defaults: this invocation loads one
-existing panel instance and fits SM--L1 at one constant.  Run it with `--help`
-to see the settings you can change.  It creates no dataset and does not require
-Gurobi.
+The single-test runner has explicit defaults for topology, `p`, `n`, method,
+penalty constant, screening, and solver settings. `Run_gaussian_roc.py` is the
+separate registered runner that evaluates the full penalty path.
 
 ## Run and summarize the full study
 
-Choose each method's penalty constant manually with the panel runners, then set
-that method and constant in the corresponding Quest job.  Submit the three
-panel arrays with:
+Submit the SM--L0 and SM--L1 ROC arrays:
 
 ```bash
 bash experiments/quest_jobs/gaussian_support_recovery/submit_all.sh
 ```
 
-After evaluation finishes:
+After evaluation finishes, build the averaged ROC table and plot:
 
 ```bash
-.venv/bin/python analysis/summarize_gaussian_experiments.py \
-  --study primary_graph_recovery
+.venv/bin/python analysis/plot_gaussian_roc.py
 ```
 
-The statistical CSV is intentionally compact.  Detailed solver diagnostics and
-run metadata are written to linked JSONL and JSON files.
+The result rows include TPR/FPR; Gurobi rows also include UB, LB, and gap.
+Detailed solver diagnostics and run metadata are written to linked JSONL and
+JSON files.

@@ -10,7 +10,11 @@ from pathlib import Path
 import numpy as np
 
 from experiments.common import instance_name, parse_list, save_instance
-from experiments.gaussian_models import build_graph, calibrated_precision
+from experiments.gaussian_models import (
+    build_graph,
+    calibrated_precision,
+    lattice_with_hubs_population,
+)
 
 
 PROJECT_DIR = Path(__file__).resolve().parents[1]
@@ -21,6 +25,7 @@ TOPOLOGY_CODES = {
     "hub": 4,
     "erdos_renyi": 5,
     "scale_free": 6,
+    "lattice_hubs": 7,
 }
 
 
@@ -39,7 +44,7 @@ def generate_one(
     overwrite: bool,
     fixed_graph: bool = False,
 ) -> dict[str, object]:
-    """Generate and save one population model and three independent samples."""
+    """Generate and save one Gaussian graphical-model instance."""
     graph_rep = 0 if fixed_graph else rep
     topology_code = TOPOLOGY_CODES[topology]
     # Excluding n, signal, and condition pairs factor levels through a common
@@ -66,14 +71,37 @@ def generate_one(
 
     graph_rng = np.random.default_rng(graph_seed)
     sample_rng = np.random.default_rng(sample_seed)
-    adjacency = build_graph(topology, p, target_degree, graph_rng)
-    precision, diagnostics = calibrated_precision(
-        adjacency,
-        target_signal=target_signal,
-        target_condition=target_condition,
-        rng=graph_rng,
-    )
-    covariance = np.asarray(diagnostics.pop("covariance"), dtype=float)
+    if topology == "lattice_hubs":
+        num_components = p // 100
+        covariance, precision, adjacency = lattice_with_hubs_population(
+            num_components=num_components,
+            side_length=10,
+            hubs_per_component=3,
+            hub_degree=20,
+            rng=graph_rng,
+        )
+        partial = np.abs(precision[adjacency]) / np.sqrt(
+            np.outer(np.diag(precision), np.diag(precision))[adjacency]
+        )
+        diagnostics = {
+            "achieved_signal": float(partial.min()),
+            "achieved_condition": float(np.linalg.cond(precision)),
+            "minimum_eigenvalue": float(np.linalg.eigvalsh(precision)[0]),
+            "data_generation_procedure": "Lin_Drton_Shojaie_2016_section_4.1_componentwise",
+            "components": num_components,
+            "component_side_length": 10,
+            "hubs_per_component": 3,
+            "hub_degree": 20,
+        }
+    else:
+        adjacency = build_graph(topology, p, target_degree, graph_rng)
+        precision, diagnostics = calibrated_precision(
+            adjacency,
+            target_signal=target_signal,
+            target_condition=target_condition,
+            rng=graph_rng,
+        )
+        covariance = np.asarray(diagnostics.pop("covariance"), dtype=float)
 
     degrees = adjacency.sum(axis=1)
     metadata: dict[str, object] = {
@@ -81,11 +109,8 @@ def generate_one(
         "topology": topology,
         "p": p,
         "n": n,
-        "target_degree": target_degree,
         "achieved_average_degree": float(degrees.mean()),
         "achieved_maximum_degree": int(degrees.max()),
-        "target_signal": target_signal,
-        "target_condition": target_condition,
         "true_edges": int(np.triu(adjacency, k=1).sum()),
         "rep": rep,
         "graph_mode": "fixed" if fixed_graph else "random",
@@ -95,13 +120,21 @@ def generate_one(
         "sample_seed": sample_seed,
         **diagnostics,
     }
+    if topology != "lattice_hubs":
+        metadata.update(
+            target_degree=target_degree,
+            target_signal=target_signal,
+            target_condition=target_condition,
+        )
     directory = output_root / study / instance_name(metadata)
     if (directory / "dataset.npz").exists() and not overwrite:
         return {"directory": str(directory), **metadata, "generation_status": "existing"}
 
     train = sample_rng.multivariate_normal(np.zeros(p), covariance, size=n)
-    validation = sample_rng.multivariate_normal(np.zeros(p), covariance, size=n)
-    test = sample_rng.multivariate_normal(np.zeros(p), covariance, size=n)
+    validation = test = None
+    if topology != "lattice_hubs":
+        validation = sample_rng.multivariate_normal(np.zeros(p), covariance, size=n)
+        test = sample_rng.multivariate_normal(np.zeros(p), covariance, size=n)
     save_instance(
         directory,
         train=train,

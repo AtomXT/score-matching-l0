@@ -21,9 +21,6 @@ from typing import Any
 import numpy as np
 from numba import njit
 
-from .score_matching_miqp import centered_sample_covariance, complete_edge_list
-
-
 @njit
 def _coordinate_descent(
     sample_covariance: np.ndarray,
@@ -104,7 +101,7 @@ def _candidate_edges(
 ) -> list[tuple[int, int]]:
     """Return the requested candidate edges or the complete edge set."""
     if edge_list is None:
-        return complete_edge_list(p)
+        return [(i, j) for i in range(p) for j in range(i + 1, p)]
     return [tuple(map(int, edge)) for edge in edge_list]
 
 
@@ -133,7 +130,8 @@ def solve_score_matching_l1(
     if assume_centered:
         sample_covariance = data.T @ data / data.shape[0]
     else:
-        sample_covariance = centered_sample_covariance(data)
+        centered = data - data.mean(axis=0, keepdims=True)
+        sample_covariance = centered.T @ centered / centered.shape[0]
     sample_covariance = np.ascontiguousarray(sample_covariance, dtype=float)
 
     edges = _candidate_edges(edge_list, sample_covariance.shape[0])

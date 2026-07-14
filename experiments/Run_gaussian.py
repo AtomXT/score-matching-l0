@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Run the topology panel with explicit editable defaults."""
+"""Run one editable Gaussian graph-recovery test."""
 
 from __future__ import annotations
 
@@ -10,37 +10,33 @@ import sys
 if __package__ in {None, ""}:
     sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
-from experiments.primary_panel_workflow import (
-    OUTPUT_ROOT,
-    run_panel,
-)
+from experiments.primary_panel_workflow import OUTPUT_ROOT, run_panel
 
 
 def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser = argparse.ArgumentParser(
-        description=__doc__,
-        formatter_class=argparse.ArgumentDefaultsHelpFormatter,
+        description=__doc__, formatter_class=argparse.ArgumentDefaultsHelpFormatter
     )
     parser.add_argument("--stage", choices=["local_check", "evaluation"], default="local_check")
-    parser.add_argument("--job-name", default="topology_local_check")
+    parser.add_argument("--job-name", default="single_test")
     parser.add_argument("--rep-list", default="0")
     parser.add_argument("--configuration-list", default=None)
-    parser.add_argument("--topology", default="scale_free", help="Graph topology.")
-    parser.add_argument("--p", type=int, default=40, help="Problem dimension.")
-    parser.add_argument("--n", type=int, default=80, help="Sample size.")
-    parser.add_argument("--max-instances", type=int, default=None)
+    parser.add_argument("--topology", default="lattice_hubs", help="Saved graph topology.")
+    parser.add_argument("--p", type=int, default=500, help="Problem dimension.")
+    parser.add_argument("--n", type=int, default=1000, help="Sample size.")
+    parser.add_argument("--max-instances", type=int, default=1)
     parser.add_argument(
         "--method-list",
         default="sm_l1",
-        help="Methods: sm_l0, sm_l0_core, sm_l1, graphl0, or glasso.",
+        help="sm_l0, sm_l0_core, sm_l1, graphl0, or glasso.",
     )
     parser.add_argument(
         "--penalty-constant-list",
         default="1",
-        help="Comma-separated penalty constants.",
+        help="One constant by default; comma-separated values are also accepted.",
     )
-    parser.add_argument("--candidate-rule", choices=["complete", "correlation"], default="complete")
-    parser.add_argument("--screen-size", type=int, default=None)
+    parser.add_argument("--candidate-rule", choices=["complete", "correlation"], default="correlation")
+    parser.add_argument("--screen-size", type=int, default=2500)
     parser.add_argument("--time-limit", type=float, default=30.0)
     parser.add_argument("--mip-gap", type=float, default=0.01)
     parser.add_argument("--threads", type=int, default=1)
@@ -60,4 +56,4 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
 
 
 if __name__ == "__main__":
-    run_panel("topology", parse_args())
+    run_panel("single_test", parse_args())

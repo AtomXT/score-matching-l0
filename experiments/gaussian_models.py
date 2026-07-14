@@ -211,6 +211,26 @@ def generate_lattice_with_hubs(
 ) -> tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
     """Generate the Gaussian simulation design used by Lin et al. (2016)."""
     rng = np.random.default_rng(seed)
+    covariance, precision, adjacency = lattice_with_hubs_population(
+        num_components=num_components,
+        side_length=side_length,
+        hubs_per_component=hubs_per_component,
+        hub_degree=hub_degree,
+        rng=rng,
+    )
+    x = rng.multivariate_normal(np.zeros(covariance.shape[0]), covariance, size=n)
+    return x, covariance, precision, adjacency
+
+
+def lattice_with_hubs_population(
+    *,
+    num_components: int,
+    side_length: int,
+    hubs_per_component: int,
+    hub_degree: int,
+    rng: np.random.Generator,
+) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
+    """Build the population covariance in the Lin et al. simulation."""
     adjacency = lattice_with_hubs_graph(
         num_components, side_length, hubs_per_component, hub_degree, rng
     )
@@ -227,8 +247,7 @@ def generate_lattice_with_hubs(
     covariance = covariance / np.outer(standard_deviations, standard_deviations)
     scale = np.diag(standard_deviations)
     precision = scale @ precision @ scale
-    x = rng.multivariate_normal(np.zeros(covariance.shape[0]), covariance, size=n)
-    return x, covariance, precision, adjacency
+    return covariance, precision, adjacency
 
 
 def generate_exact_edge_gaussian(

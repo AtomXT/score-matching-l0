@@ -1,9 +1,7 @@
 #!/usr/bin/env python3
 """Generate every dataset for the primary Gaussian graph-recovery study.
 
-This file is intentionally a no-argument entry point.  Running it directly in
-PyCharm creates the six configurations and ten replications specified in the
-manuscript, together with one manifest describing all 60 instances.
+This no-argument entry point creates ten registered p=500, n=1000 ROC datasets.
 """
 
 from __future__ import annotations
@@ -33,6 +31,9 @@ from experiments.primary_graph_recovery_config import (
 STUDY = "primary_graph_recovery"
 OUTPUT_ROOT = PROJECT_DIR / "data" / "gaussian_experiments"
 BASE_SEED = 2027
+# The generic generator requires these arguments, but the registered
+# lattice-with-hubs branch follows Lin et al. directly and does not calibrate
+# its population to them.
 TARGET_DEGREE = 4
 TARGET_SIGNAL = 0.20
 TARGET_CONDITION = 10.0
@@ -51,7 +52,7 @@ PANEL_SETTINGS = {
 
 
 def unique_settings() -> list[dict[str, int | str]]:
-    """Return the six configurations without repeated panel entries."""
+    """Return the registered configurations without repeated panel entries."""
     unique: dict[tuple[str, int, int], dict[str, int | str]] = {}
     for settings in PANEL_SETTINGS.values():
         for setting in settings:
@@ -105,9 +106,8 @@ def generate_all(
         "number_of_replications": len(replication_ids),
         "number_of_instances": len(records),
         "base_seed": BASE_SEED,
-        "target_degree": TARGET_DEGREE,
-        "target_signal": TARGET_SIGNAL,
-        "target_condition": TARGET_CONDITION,
+        "data_generation": "Lin, Drton, and Shojaie (2016), Section 4.1; five components for p=500",
+        "paper_url": "https://pmc.ncbi.nlm.nih.gov/articles/PMC5476334/",
         "panels": PANEL_SETTINGS,
         "unique_settings": settings,
     }

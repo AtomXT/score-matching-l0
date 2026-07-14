@@ -191,7 +191,8 @@ def standardize_instance(arrays: dict[str, np.ndarray]) -> dict[str, np.ndarray]
 
     transformed = dict(arrays)
     for name in ("X", "X_train", "X_validation", "X_test"):
-        transformed[name] = (np.asarray(arrays[name], dtype=float) - location) / scale
+        if name in arrays:
+            transformed[name] = (np.asarray(arrays[name], dtype=float) - location) / scale
     return transformed
 
 

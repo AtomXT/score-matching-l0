@@ -30,7 +30,7 @@ def solve_score_matching_core_miqp(
     x: np.ndarray,
     *,
     lambda_value: float,
-    big_m_init: float = 1000.0,
+    big_m_init: float = 100.0,
     time_limit: float | None = 60.0,
     mip_gap: float | None = 0.05,
     output_flag: bool = False,

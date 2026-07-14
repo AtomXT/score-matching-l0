@@ -26,6 +26,11 @@ def parse_list(text: str, cast: Callable[[str], T]) -> list[T]:
 
 def instance_name(metadata: dict[str, Any]) -> str:
     """Return a stable, human-readable folder name for one instance."""
+    if metadata["topology"] == "lattice_hubs":
+        return (
+            f"topology=lattice_hubs_p={metadata['p']:04d}_n={metadata['n']:04d}_"
+            f"graph={metadata.get('graph_mode', 'random')}_rep={metadata['rep']:03d}"
+        )
     return (
         f"topology={metadata['topology']}_p={metadata['p']:03d}_n={metadata['n']:04d}_"
         f"degree={metadata['target_degree']:02d}_signal={metadata['target_signal']:.3f}_"
@@ -38,8 +43,8 @@ def save_instance(
     directory: Path,
     *,
     train: np.ndarray,
-    validation: np.ndarray,
-    test: np.ndarray,
+    validation: np.ndarray | None,
+    test: np.ndarray | None,
     covariance: np.ndarray,
     precision: np.ndarray,
     adjacency: np.ndarray,
@@ -47,20 +52,21 @@ def save_instance(
 ) -> None:
     """Save one complete synthetic instance and its generation record."""
     directory.mkdir(parents=True, exist_ok=True)
+    arrays = {
+        "X_train": train,
+        "Sigma": covariance,
+        "precision": precision,
+        "adjacency": adjacency.astype(np.int8),
+    }
+    if validation is not None:
+        arrays["X_validation"] = validation
+    if test is not None:
+        arrays["X_test"] = test
     # Write each file atomically.  This matters on Quest when two panel jobs
     # encounter the one configuration shared by the primary-study panels.
     with tempfile.NamedTemporaryFile(dir=directory, suffix=".npz", delete=False) as file:
         temporary_dataset = Path(file.name)
-        np.savez_compressed(
-            file,
-            X=train,
-            X_train=train,
-            X_validation=validation,
-            X_test=test,
-            Sigma=covariance,
-            precision=precision,
-            adjacency=adjacency.astype(np.int8),
-        )
+        np.savez_compressed(file, **arrays)
     os.replace(temporary_dataset, directory / "dataset.npz")
 
     with tempfile.NamedTemporaryFile(

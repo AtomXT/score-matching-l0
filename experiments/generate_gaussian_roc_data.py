@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Generate the sample-size panel of the primary Gaussian experiment."""
+"""Generate the registered p=500, n=1000 lattice-with-hubs ROC datasets."""
 
 from pathlib import Path
 import sys
@@ -11,5 +11,4 @@ from experiments.primary_panel_workflow import generate_panel_cli
 
 
 if __name__ == "__main__":
-    generate_panel_cli("sample_size")
-
+    generate_panel_cli("roc")
