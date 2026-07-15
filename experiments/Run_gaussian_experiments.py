@@ -22,7 +22,7 @@ import numpy as np
 
 from experiments.common import (
     append_result,
-    correlation_screen,
+    graphical_lasso_screen,
     load_instance,
     parse_list,
     support_metrics,
@@ -98,8 +98,17 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         help="Semicolon-separated topology:p:n triples used as exact filters.",
     )
     parser.add_argument("--max-instances", type=int, default=None)
-    parser.add_argument("--candidate-rule", choices=["complete", "correlation"], default="complete")
-    parser.add_argument("--screen-size", type=int, default=None)
+    parser.add_argument(
+        "--candidate-rule",
+        choices=["complete", "graphical_lasso"],
+        default="complete",
+    )
+    parser.add_argument(
+        "--screen-alpha",
+        type=float,
+        default=0.01,
+        help="Graphical lasso penalty used only to screen candidate edges.",
+    )
     parser.add_argument("--time-limit", type=float, default=3600.0)
     parser.add_argument("--mip-gap", type=float, default=0.01)
     parser.add_argument("--big-m-init", type=float, default=1000.0)
@@ -111,7 +120,7 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser.add_argument("--graphl0-m-bound", type=float, default=100.0)
     parser.add_argument("--glasso-max-iter", type=int, default=1_000)
     parser.add_argument("--glasso-tolerance", type=float, default=1e-4)
-    parser.add_argument("--verbose", action="store_true")
+    parser.add_argument("--verbose", action=argparse.BooleanOptionalAction, default=True)
     parser.add_argument("--overwrite-results", action="store_true")
     parser.add_argument(
         "--data-root",
@@ -160,15 +169,21 @@ def candidate_edges(
     truth: np.ndarray,
     *,
     rule: str,
-    screen_size: int | None,
+    screen_alpha: float,
+    screen_max_iter: int,
+    screen_tolerance: float,
 ) -> tuple[list[tuple[int, int]], float]:
     """Construct one candidate set and report the fraction of true edges kept."""
     p = x.shape[1]
-    total = p * (p - 1) // 2
     if rule == "complete":
         edges = [(i, j) for i in range(p) for j in range(i + 1, p)]
     else:
-        edges = correlation_screen(x, min(screen_size, total))
+        edges = graphical_lasso_screen(
+            x,
+            alpha=screen_alpha,
+            max_iter=screen_max_iter,
+            tolerance=screen_tolerance,
+        )
     true_edges = {(i, j) for i in range(p) for j in range(i + 1, p) if truth[i, j]}
     retained = len(true_edges.intersection(edges))
     recall = retained / len(true_edges) if true_edges else 1.0
@@ -464,7 +479,9 @@ def run(args: argparse.Namespace) -> Path:
             arrays["X_train"],
             arrays["adjacency"],
             rule=args.candidate_rule,
-            screen_size=args.screen_size,
+            screen_alpha=args.screen_alpha,
+            screen_max_iter=args.glasso_max_iter,
+            screen_tolerance=args.glasso_tolerance,
         )
         for method, constant in fit_plan:
             lambda_value, penalty_rate = penalty_value(
@@ -510,6 +527,7 @@ def run(args: argparse.Namespace) -> Path:
             diagnostic_record = {
                 **identifiers,
                 "candidate_rule": args.candidate_rule,
+                "screen_alpha": args.screen_alpha,
                 "candidate_edges": len(edges),
                 "candidate_recall": screen_recall,
                 "fit": fit_output,

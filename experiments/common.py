@@ -170,14 +170,31 @@ def heldout_scores(x: np.ndarray, precision: np.ndarray) -> dict[str, float]:
     return {"heldout_score": float(score), "heldout_gaussian_nll": float(nll)}
 
 
-def correlation_screen(x: np.ndarray, number_of_edges: int) -> list[tuple[int, int]]:
-    """Return the largest empirical-correlation pairs for heuristic screening."""
-    p = x.shape[1]
-    total = p * (p - 1) // 2
-    if number_of_edges >= total:
-        return [(i, j) for i in range(p) for j in range(i + 1, p)]
+def graphical_lasso_screen(
+    x: np.ndarray,
+    alpha: float = 0.01,
+    *,
+    max_iter: int = 1_000,
+    tolerance: float = 1e-4,
+    support_tolerance: float = 1e-8,
+) -> list[tuple[int, int]]:
+    """Return edges retained by a lightly regularized graphical lasso fit."""
+    if alpha <= 0:
+        raise ValueError("graphical lasso screening alpha must be positive")
 
-    correlation = np.corrcoef(x, rowvar=False)
-    pairs = [(i, j) for i in range(p) for j in range(i + 1, p)]
-    order = np.argsort([-abs(correlation[i, j]) for i, j in pairs], kind="stable")
-    return [pairs[index] for index in order[:number_of_edges]]
+    from sklearn.covariance import graphical_lasso
+
+    centered = np.asarray(x, dtype=float) - np.mean(x, axis=0, keepdims=True)
+    sample_covariance = centered.T @ centered / centered.shape[0]
+    _, precision = graphical_lasso(
+        sample_covariance,
+        alpha=alpha,
+        max_iter=max_iter,
+        tol=tolerance,
+    )
+    return [
+        (i, j)
+        for i in range(precision.shape[0])
+        for j in range(i + 1, precision.shape[1])
+        if abs(precision[i, j]) > support_tolerance
+    ]

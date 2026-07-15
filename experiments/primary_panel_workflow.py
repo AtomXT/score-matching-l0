@@ -55,6 +55,8 @@ def run_panel(panel: str, args: argparse.Namespace) -> None:
         args.method_list,
         "--candidate-rule",
         args.candidate_rule,
+        "--screen-alpha",
+        str(args.screen_alpha),
         "--time-limit",
         str(args.time_limit),
         "--mip-gap",
@@ -97,8 +99,6 @@ def run_panel(panel: str, args: argparse.Namespace) -> None:
         runner_argv.extend(["--configuration-list", args.configuration_list])
     if args.max_instances is not None:
         runner_argv.extend(["--max-instances", str(args.max_instances)])
-    if args.screen_size is not None:
-        runner_argv.extend(["--screen-size", str(args.screen_size)])
     runner_argv.extend(["--penalty-constant-list", args.penalty_constant_list])
     results_csv = args.results_csv
     if results_csv is None and args.stage == "evaluation":

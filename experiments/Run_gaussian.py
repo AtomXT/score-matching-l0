@@ -35,8 +35,12 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         default="2.28",
         help="One constant by default; comma-separated values are also accepted.",
     )
-    parser.add_argument("--candidate-rule", choices=["complete", "correlation"], default="correlation")
-    parser.add_argument("--screen-size", type=int, default=2500)
+    parser.add_argument(
+        "--candidate-rule",
+        choices=["complete", "graphical_lasso"],
+        default="graphical_lasso",
+    )
+    parser.add_argument("--screen-alpha", type=float, default=0.01)
     parser.add_argument("--time-limit", type=float, default=30.0)
     parser.add_argument("--mip-gap", type=float, default=0.01)
     parser.add_argument("--threads", type=int, default=1)

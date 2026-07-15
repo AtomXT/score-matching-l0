@@ -33,7 +33,7 @@ record the population targets and generation seeds.
 
 ## Run the penalty path
 
-`Run_gaussian_roc.py` exposes `p`, `n`, method, penalty path, screening size,
+`Run_gaussian_roc.py` exposes `p`, `n`, method, penalty path, screening penalty,
 solver limits, and output paths as explicit arguments. Its defaults load
 replication 0 at `p=500, n=1000` and run SM–L1:
 
@@ -61,10 +61,11 @@ point is retained for the ROC curve.
 
 There are 124,750 possible undirected edges at `p=500`, which is too large for
 the current research MIQP. The registered runner therefore gives both
-score-matching methods the same 2,500 edges with largest absolute sample
-correlations. Unscreened edges count as absent in TPR/FPR, and each diagnostics
-record reports `candidate_recall`; this makes the resulting plot a screened ROC
-curve rather than an unrestricted 124,750-edge ROC curve.
+score-matching methods the support selected by a lightly regularized graphical
+lasso fit with `--screen-alpha 0.01`. Unscreened edges count as absent in
+TPR/FPR, and each diagnostics record reports `candidate_recall`; this makes the
+resulting plot a screened ROC curve rather than an unrestricted 124,750-edge
+ROC curve.
 
 Each result row includes TPR, FPR, the penalty constant and realized penalty.
 Gurobi fits additionally record the incumbent objective (`UB`), best bound

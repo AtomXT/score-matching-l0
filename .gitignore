@@ -18,6 +18,7 @@ references/
 paper/
 .idea/
 experiments_results/
+experiments/quest_jobs/outlog
 *local_check*
 
 # Author-supplied SM--L1 files have no stated redistribution license.  Keep

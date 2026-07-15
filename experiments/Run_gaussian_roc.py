@@ -31,8 +31,12 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         default="0.01,0.02,0.05,0.1,0.2,0.3,0.5,0.7,1,1.2,1.4,1.6,1.8,2,2.5,3,5,10,20,50,100",
         help="Common path of constants used to construct the ROC curve.",
     )
-    parser.add_argument("--candidate-rule", choices=["complete", "correlation"], default="correlation")
-    parser.add_argument("--screen-size", type=int, default=2500)
+    parser.add_argument(
+        "--candidate-rule",
+        choices=["complete", "graphical_lasso"],
+        default="graphical_lasso",
+    )
+    parser.add_argument("--screen-alpha", type=float, default=0.01)
     parser.add_argument("--time-limit", type=float, default=600.0)
     parser.add_argument("--mip-gap", type=float, default=0.01)
     parser.add_argument("--threads", type=int, default=8)
