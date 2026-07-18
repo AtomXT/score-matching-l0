@@ -34,9 +34,18 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser.add_argument(
         "--candidate-rule",
         choices=["complete", "graphical_lasso"],
-        default="graphical_lasso",
+        default="complete",
+        help=(
+            "Legacy option. SM-L0 methods use the fixed marginal screen and "
+            "SM-L1 uses the complete edge set."
+        ),
     )
-    parser.add_argument("--screen-alpha", type=float, default=0.01)
+    parser.add_argument(
+        "--screen-alpha",
+        type=float,
+        default=0.01,
+        help="Legacy graphical-lasso screening value; unused by score matching.",
+    )
     parser.add_argument("--time-limit", type=float, default=600.0)
     parser.add_argument("--mip-gap", type=float, default=0.01)
     parser.add_argument("--threads", type=int, default=8)

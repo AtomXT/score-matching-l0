@@ -61,12 +61,13 @@ The common constant path is multiplied by `log(p)/n` for SM–L0 and by
 point is retained for the ROC curve.
 
 There are 124,750 possible undirected edges at `p=500`, which is too large for
-the current research MIQP. The registered runner therefore gives both
-score-matching methods the support selected by a lightly regularized graphical
-lasso fit with `--screen-alpha 0.01`. Unscreened edges count as absent in
-TPR/FPR, and each diagnostics record reports `candidate_recall`; this makes the
-resulting plot a screened ROC curve rather than an unrestricted 124,750-edge
-ROC curve.
+the current research MIQP. SM-L0 and SM-L0-CORe therefore use a loose marginal
+score-matching screen with `gamma = 0.5`: edge `(i, j)` is retained when
+`abs(r_ij) > sqrt(gamma * lambda / (1 + gamma * lambda))`. Because `lambda`
+depends on the penalty constant, the candidate set is recomputed at every ROC
+point. SM-L1 is unscreened and uses the complete edge set. Each diagnostics
+record reports the actual `candidate_rule`, `screen_gamma`, `screen_threshold`,
+candidate count, and candidate recall.
 
 Each result row includes TPR, FPR, the penalty constant and realized penalty.
 Gurobi fits additionally record the incumbent objective (`UB`), best bound

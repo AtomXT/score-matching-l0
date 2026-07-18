@@ -36,8 +36,6 @@ python3 -u -m experiments.Run_gaussian_roc \
   --n "${N}" \
   --method-list "${METHOD}" \
   --penalty-constant-list "${PENALTY_CONSTANTS}" \
-  --candidate-rule "graphical_lasso" \
-  --screen-alpha "0.08" \
   --results-csv "${RESULTS_DIR}/${METHOD}_rep${REPLICATION}.csv" \
   --time-limit "600" \
   --mip-gap "0.001" \
