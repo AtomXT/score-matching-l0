@@ -23,7 +23,7 @@
     "rep_list": "0",
     "results_csv": "experiments_results/gaussian_primary_graph_recovery/topology=erdos_renyi_p=10_n=100/sm_l0_core_rep0.csv",
     "run_manifest": null,
-    "screen_alpha": 0.05,
+    "screen_alpha": 0.001,
     "stage": "evaluation",
     "study": "primary_graph_recovery",
     "threads": 8,
@@ -39,11 +39,11 @@
     "numpy_version": "1.26.3",
     "python_version": "3.9.5",
     "slurm_array_task_id": "0",
-    "slurm_job_id": "7369484",
+    "slurm_job_id": "7370105",
     "threads": 8,
     "time_limit": 600.0
   },
-  "finished_at": "2026-07-18T20:38:37.478442+00:00",
+  "finished_at": "2026-07-18T20:50:24.504275+00:00",
   "fit_failures": 0,
   "fit_plan": [
     {
@@ -125,6 +125,6 @@
   "results_csv": "experiments_results/gaussian_primary_graph_recovery/topology=erdos_renyi_p=10_n=100/sm_l0_core_rep0.csv",
   "schema_version": 1,
   "stage": "evaluation",
-  "started_at": "2026-07-18T20:38:29.179920+00:00",
+  "started_at": "2026-07-18T20:50:07.529598+00:00",
   "study": "primary_graph_recovery"
 }

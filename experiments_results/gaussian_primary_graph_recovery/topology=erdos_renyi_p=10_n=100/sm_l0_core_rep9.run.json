@@ -23,7 +23,7 @@
     "rep_list": "9",
     "results_csv": "experiments_results/gaussian_primary_graph_recovery/topology=erdos_renyi_p=10_n=100/sm_l0_core_rep9.csv",
     "run_manifest": null,
-    "screen_alpha": 0.05,
+    "screen_alpha": 0.001,
     "stage": "evaluation",
     "study": "primary_graph_recovery",
     "threads": 8,
@@ -34,16 +34,16 @@
   "diagnostics_jsonl": "experiments_results/gaussian_primary_graph_recovery/topology=erdos_renyi_p=10_n=100/sm_l0_core_rep9.diagnostics.jsonl",
   "environment": {
     "gurobi_version": "12.0.3",
-    "host": "qnode0137",
+    "host": "qnode0024",
     "mip_gap_target": 0.001,
     "numpy_version": "1.26.3",
     "python_version": "3.9.5",
     "slurm_array_task_id": "9",
-    "slurm_job_id": "7369481",
+    "slurm_job_id": "7370104",
     "threads": 8,
     "time_limit": 600.0
   },
-  "finished_at": "2026-07-18T20:38:46.319836+00:00",
+  "finished_at": "2026-07-18T20:50:38.264162+00:00",
   "fit_failures": 0,
   "fit_plan": [
     {
@@ -125,6 +125,6 @@
   "results_csv": "experiments_results/gaussian_primary_graph_recovery/topology=erdos_renyi_p=10_n=100/sm_l0_core_rep9.csv",
   "schema_version": 1,
   "stage": "evaluation",
-  "started_at": "2026-07-18T20:38:27.560198+00:00",
+  "started_at": "2026-07-18T20:50:04.670365+00:00",
   "study": "primary_graph_recovery"
 }
