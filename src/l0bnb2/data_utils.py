@@ -122,28 +122,3 @@ def preprocess(X, assume_centered=False, cholesky=False):
         Y = X/np.sqrt(n)
         S_diag = np.linalg.norm(Y, axis=0) ** 2
     return n,p,X,X_mean,Y,S_diag
-
-
-"""
-Centering and normalizing the training, validation and test data 
-"""
-
-
-def preprocess2(X, X_val, X_test, assume_centered=False):
-    if assume_centered:
-        X_mean = np.zeros(X.shape[1])
-    else:
-        X_mean = np.mean(X, axis=0)
-        Y = X - X_mean
-        Y_val = X_val - X_mean
-        Y_test = X_test - X_mean
-
-    n, _ = Y.shape
-    Y = Y/np.sqrt(n)
-    n, _ = Y_val.shape
-    Y_val = Y_val/np.sqrt(n)
-    n, _ = Y_test.shape
-    Y_test = Y_test/np.sqrt(n)
-    
-
-    return X,X_mean,Y,Y_val, Y_test

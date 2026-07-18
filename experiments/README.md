@@ -7,10 +7,11 @@ penalty constant for each method.
 ## Data-generating procedure
 
 The main experiment uses ten independently generated connected Erdős–Rényi
-graphs at `p=500` and `n=1000`. Each graph has target average degree 4. Random
-edge signs and magnitudes are calibrated to target minimum partial correlation
-0.20 and precision-matrix condition number 10, after which the covariance is
-standardized and mean-zero Gaussian observations are drawn.
+graphs at the `p` and `n` registered in `primary_graph_recovery_config.py`.
+Each graph has target average degree 4. Random edge signs and magnitudes are
+calibrated to target minimum partial correlation 0.20 and precision-matrix
+condition number 10, after which the covariance is standardized and mean-zero
+Gaussian observations are drawn.
 
 ## Generate the data
 
@@ -86,11 +87,12 @@ ROC and precision–recall plots:
 python3 analysis/plot_gaussian_roc.py
 ```
 
-This writes `experiments_results/gaussian_roc_summary.csv`,
-`experiments_results/gaussian_roc.png`, and
-`experiments_results/gaussian_pr.png`. Failed fits are excluded; the summary
-reports the mean and standard error of TPR, FPR, and precision, together with
-the number of available replications for each point.
+Results and plots are grouped by configuration under
+`experiments_results/gaussian_primary_graph_recovery/`. For example,
+`topology=erdos_renyi_p=500_n=1000/` contains that configuration's replication
+CSVs, `roc_summary.csv`, `roc.png`, and `pr.png`. Failed fits are excluded; the
+summary reports the mean and standard error of TPR, FPR, and precision,
+together with the number of available replications for each point.
 
 ## Single tests
 

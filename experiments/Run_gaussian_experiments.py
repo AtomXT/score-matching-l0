@@ -199,15 +199,13 @@ def _support_metrics(
 
 
 def standardize_instance(arrays: dict[str, np.ndarray]) -> dict[str, np.ndarray]:
-    """Standardize every sample split using training-sample quantities."""
-    train = np.asarray(arrays["X_train"], dtype=float)
-    location = train.mean(axis=0)
-    scale = train.std(axis=0, ddof=0)
+    """Standardize the observations columnwise."""
+    x = np.asarray(arrays["X"], dtype=float)
+    location = x.mean(axis=0)
+    scale = x.std(axis=0, ddof=0)
 
     transformed = dict(arrays)
-    for name in ("X", "X_train", "X_validation", "X_test"):
-        if name in arrays:
-            transformed[name] = (np.asarray(arrays[name], dtype=float) - location) / scale
+    transformed["X"] = (x - location) / scale
     return transformed
 
 
@@ -219,7 +217,7 @@ def fit_method(
     args: argparse.Namespace,
 ) -> dict[str, Any]:
     """Fit one method and return its graph metrics and solver diagnostics."""
-    x = arrays["X_train"]
+    x = arrays["X"]
     if method in {"sm_l0", "sm_l0_core"}:
         solver = (
             score_matching_core_miqp.solve_score_matching_core_miqp
@@ -410,9 +408,38 @@ def run(args: argparse.Namespace) -> Path:
     requested_n = set(parse_list(args.n_list, int)) if args.n_list else None
     requested_configurations = _requested_configurations(args.configuration_list)
 
-    results_csv = args.results_csv or (
-        PROJECT_DIR / "experiments_results" / f"gaussian_{args.study}_{args.job_name}.csv"
-    )
+    results_csv = args.results_csv
+    if results_csv is None:
+        if requested_configurations is not None and len(requested_configurations) == 1:
+            topology, p, n = next(iter(requested_configurations))
+            configuration_tag = f"topology={topology}_p={p}_n={n}"
+        elif (
+            requested_topologies is not None
+            and len(requested_topologies) == 1
+            and requested_p is not None
+            and len(requested_p) == 1
+            and requested_n is not None
+            and len(requested_n) == 1
+        ):
+            configuration_tag = (
+                f"topology={next(iter(requested_topologies))}_"
+                f"p={next(iter(requested_p))}_n={next(iter(requested_n))}"
+            )
+        else:
+            configuration_tag = "mixed_configurations"
+        method_tag = "-".join(methods)
+        replication_tag = (
+            "-".join(map(str, requested_rep_list))
+            if requested_rep_list is not None
+            else "all"
+        )
+        results_csv = (
+            PROJECT_DIR
+            / "experiments_results"
+            / f"gaussian_{args.study}"
+            / configuration_tag
+            / f"{args.job_name}_{method_tag}_rep{replication_tag}.csv"
+        )
     diagnostics_jsonl = args.diagnostics_jsonl or results_csv.with_suffix(
         ".diagnostics.jsonl"
     )
@@ -476,7 +503,7 @@ def run(args: argparse.Namespace) -> Path:
         arrays, _ = load_instance(dataset_path.parent)
         arrays = standardize_instance(arrays)
         edges, screen_recall = candidate_edges(
-            arrays["X_train"],
+            arrays["X"],
             arrays["adjacency"],
             rule=args.candidate_rule,
             screen_alpha=args.screen_alpha,

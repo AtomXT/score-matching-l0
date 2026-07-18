@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 import numpy as np
+from scipy import sparse
+from scipy.sparse.linalg import eigsh
 
 
 def chain_graph(p: int) -> np.ndarray:
@@ -110,23 +112,47 @@ def build_graph(
     return adjacency
 
 
-def _precision_for_weight_floor(
-    adjacency: np.ndarray,
+def _extreme_eigenvalues(matrix: sparse.spmatrix) -> tuple[float, float]:
+    """Return the smallest and largest eigenvalues of a symmetric matrix."""
+    if matrix.shape[0] <= 3:
+        eigenvalues = np.linalg.eigvalsh(matrix.toarray())
+    else:
+        eigenvalues = eigsh(
+            matrix,
+            k=2,
+            which="BE",
+            return_eigenvectors=False,
+            tol=1e-8,
+        )
+    return float(np.min(eigenvalues)), float(np.max(eigenvalues))
+
+
+def _calibration_for_weight_floor(
+    p: int,
+    upper_i: np.ndarray,
+    upper_j: np.ndarray,
     signs: np.ndarray,
     uniforms: np.ndarray,
     weight_floor: float,
     target_condition: float,
-) -> tuple[np.ndarray, float, float]:
-    weights = adjacency * signs * (weight_floor + (1.0 - weight_floor) * uniforms)
-    weights = np.triu(weights, k=1)
-    weights = weights + weights.T
-    eigenvalues = np.linalg.eigvalsh(weights)
-    smallest, largest = float(eigenvalues[0]), float(eigenvalues[-1])
+) -> tuple[np.ndarray, float, float, float]:
+    """Evaluate one edge-weight floor without constructing a dense matrix."""
+    edge_weights = signs * (weight_floor + (1.0 - weight_floor) * uniforms)
+    weights = sparse.csr_matrix(
+        (
+            np.concatenate((edge_weights, edge_weights)),
+            (
+                np.concatenate((upper_i, upper_j)),
+                np.concatenate((upper_j, upper_i)),
+            ),
+        ),
+        shape=(p, p),
+    )
+    smallest, largest = _extreme_eigenvalues(weights)
     diagonal = (largest - target_condition * smallest) / (target_condition - 1.0)
-    precision = weights + diagonal * np.eye(adjacency.shape[0])
-    achieved_condition = float(np.linalg.cond(precision))
-    achieved_signal = float(np.min(np.abs(weights[adjacency])) / diagonal)
-    return precision, achieved_signal, achieved_condition
+    achieved_signal = float(np.min(np.abs(edge_weights)) / diagonal)
+    achieved_condition = float((largest + diagonal) / (smallest + diagonal))
+    return edge_weights, diagonal, achieved_signal, achieved_condition
 
 
 def calibrated_precision(
@@ -138,34 +164,55 @@ def calibrated_precision(
 ) -> tuple[np.ndarray, dict[str, float | np.ndarray]]:
     """Calibrate edge heterogeneity and the spectral condition number."""
     p = adjacency.shape[0]
-    signs = np.zeros((p, p), dtype=float)
-    uniforms = np.zeros((p, p), dtype=float)
     upper_i, upper_j = np.where(np.triu(adjacency, k=1))
-    signs[upper_i, upper_j] = rng.choice([-1.0, 1.0], size=len(upper_i))
-    uniforms[upper_i, upper_j] = rng.random(len(upper_i))
+    signs = rng.choice([-1.0, 1.0], size=len(upper_i))
+    uniforms = rng.random(len(upper_i))
 
-    candidates: list[tuple[float, float, float, np.ndarray]] = []
+    best_error = float("inf")
+    best_edge_weights: np.ndarray | None = None
+    best_diagonal = float("nan")
+    condition = float("nan")
     for weight_floor in np.linspace(0.05, 1.0, 20):
-        precision, signal, condition = _precision_for_weight_floor(
-            adjacency, signs, uniforms, float(weight_floor), target_condition
+        edge_weights, diagonal, signal, candidate_condition = (
+            _calibration_for_weight_floor(
+                p,
+                upper_i,
+                upper_j,
+                signs,
+                uniforms,
+                float(weight_floor),
+                target_condition,
+            )
         )
-        candidates.append((abs(signal - target_signal), signal, condition, precision))
-    error, _, condition, precision = min(candidates, key=lambda item: item[0])
+        error = abs(signal - target_signal)
+        if error < best_error:
+            best_error = error
+            best_edge_weights = edge_weights
+            best_diagonal = diagonal
+            condition = candidate_condition
+
+    if best_edge_weights is None:
+        raise ValueError("cannot calibrate a precision matrix without graph edges")
+    precision = np.zeros((p, p), dtype=float)
+    precision[upper_i, upper_j] = best_edge_weights
+    precision[upper_j, upper_i] = best_edge_weights
+    np.fill_diagonal(precision, best_diagonal)
 
     covariance = np.linalg.inv(precision)
-    scale = np.diag(np.sqrt(np.diag(covariance)))
-    standardized_precision = scale @ precision @ scale
-    standardized_covariance = np.linalg.inv(standardized_precision)
+    scale = np.sqrt(np.diag(covariance))
+    standardized_precision = precision * scale[:, None] * scale[None, :]
+    standardized_covariance = covariance / scale[:, None] / scale[None, :]
+    smallest, largest = _extreme_eigenvalues(sparse.csr_matrix(standardized_precision))
     rows, columns = np.where(adjacency)
     partial = np.abs(standardized_precision[rows, columns]) / np.sqrt(
         standardized_precision[rows, rows] * standardized_precision[columns, columns]
     )
     diagnostics: dict[str, float | np.ndarray] = {
         "achieved_signal": float(partial.min()),
-        "signal_calibration_error": float(error),
+        "signal_calibration_error": float(best_error),
         "condition_before_standardization": float(condition),
-        "achieved_condition": float(np.linalg.cond(standardized_precision)),
-        "minimum_eigenvalue": float(np.linalg.eigvalsh(standardized_precision)[0]),
+        "achieved_condition": float(largest / smallest),
+        "minimum_eigenvalue": float(smallest),
         "covariance": standardized_covariance,
     }
     return standardized_precision, diagnostics
@@ -244,9 +291,12 @@ def lattice_with_hubs_population(
     np.fill_diagonal(precision, 1.0)
     covariance = np.linalg.inv(precision)
     standard_deviations = np.sqrt(np.diag(covariance))
-    covariance = covariance / np.outer(standard_deviations, standard_deviations)
-    scale = np.diag(standard_deviations)
-    precision = scale @ precision @ scale
+    covariance = (
+        covariance / standard_deviations[:, None] / standard_deviations[None, :]
+    )
+    precision = (
+        precision * standard_deviations[:, None] * standard_deviations[None, :]
+    )
     return covariance, precision, adjacency
 
 

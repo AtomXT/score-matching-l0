@@ -21,35 +21,51 @@ PROJECT_DIR = Path(__file__).resolve().parents[1]
 
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("--p", type=int, default=500)
+    parser.add_argument("--n", type=int, default=1000)
+    parser.add_argument("--topology", default="erdos_renyi")
+    parser.add_argument(
+        "--results-root",
+        type=Path,
+        default=PROJECT_DIR
+        / "experiments_results"
+        / "gaussian_primary_graph_recovery",
+    )
     parser.add_argument(
         "--input-glob",
-        default=str(
-            PROJECT_DIR
-            / "experiments_results/gaussian_primary_graph_recovery_roc_*_rep*.csv"
-        ),
+        default=None,
+        help="Override the configuration-specific input glob.",
     )
     parser.add_argument(
         "--summary-csv",
         type=Path,
-        default=PROJECT_DIR / "experiments_results/gaussian_roc_summary.csv",
+        default=None,
     )
     parser.add_argument(
         "--plot-path",
         type=Path,
-        default=PROJECT_DIR / "experiments_results/gaussian_roc.png",
+        default=None,
     )
     parser.add_argument(
         "--pr-plot-path",
         type=Path,
-        default=PROJECT_DIR / "experiments_results/gaussian_pr.png",
+        default=None,
     )
-    parser.add_argument("--p", type=int, default=500)
-    parser.add_argument("--n", type=int, default=1000)
-    parser.add_argument("--topology", default="erdos_renyi")
     args = parser.parse_args()
 
+    results_dir = (
+        args.results_root / f"topology={args.topology}_p={args.p}_n={args.n}"
+    )
+    input_glob = args.input_glob or str(results_dir / "*_rep*.csv")
+    summary_csv = args.summary_csv or results_dir / "roc_summary.csv"
+    plot_path = args.plot_path or results_dir / "roc.png"
+    pr_plot_path = args.pr_plot_path or results_dir / "pr.png"
+
     fits = {}
-    for path in sorted(glob.glob(args.input_glob)):
+    input_paths = sorted(glob.glob(input_glob))
+    if not input_paths:
+        parser.error(f"no result files matched: {input_glob}")
+    for path in input_paths:
         with open(path, newline="", encoding="utf-8") as file:
             for row in csv.DictReader(file):
                 if (
@@ -88,14 +104,19 @@ def main() -> None:
                 "se_precision": array[:, 2].std(ddof=1) / np.sqrt(count) if count > 1 else 0.0,
             }
         )
+    if not summary:
+        parser.error(
+            "result files were found, but no available fits matched "
+            f"topology={args.topology}, p={args.p}, n={args.n}"
+        )
 
-    args.summary_csv.parent.mkdir(parents=True, exist_ok=True)
+    summary_csv.parent.mkdir(parents=True, exist_ok=True)
     columns = list(summary[0]) if summary else [
         "method", "penalty_constant", "penalty_rate", "replications",
         "mean_FPR", "se_FPR", "mean_TPR", "se_TPR",
         "mean_precision", "se_precision",
     ]
-    with args.summary_csv.open("w", newline="", encoding="utf-8") as file:
+    with summary_csv.open("w", newline="", encoding="utf-8") as file:
         writer = csv.DictWriter(file, fieldnames=columns)
         writer.writeheader()
         writer.writerows(summary)
@@ -126,8 +147,8 @@ def main() -> None:
     axis.grid(alpha=0.25)
     axis.legend(frameon=False)
     fig.tight_layout()
-    args.plot_path.parent.mkdir(parents=True, exist_ok=True)
-    fig.savefig(args.plot_path, dpi=200)
+    plot_path.parent.mkdir(parents=True, exist_ok=True)
+    fig.savefig(plot_path, dpi=200)
 
     fig, axis = plt.subplots(figsize=(6.2, 5.2))
     for method in sorted({row["method"] for row in summary}):
@@ -154,11 +175,11 @@ def main() -> None:
     axis.grid(alpha=0.25)
     axis.legend(frameon=False)
     fig.tight_layout()
-    args.pr_plot_path.parent.mkdir(parents=True, exist_ok=True)
-    fig.savefig(args.pr_plot_path, dpi=200)
-    print(f"Wrote {args.summary_csv}")
-    print(f"Wrote {args.plot_path}")
-    print(f"Wrote {args.pr_plot_path}")
+    pr_plot_path.parent.mkdir(parents=True, exist_ok=True)
+    fig.savefig(pr_plot_path, dpi=200)
+    print(f"Wrote {summary_csv}")
+    print(f"Wrote {plot_path}")
+    print(f"Wrote {pr_plot_path}")
 
 
 if __name__ == "__main__":

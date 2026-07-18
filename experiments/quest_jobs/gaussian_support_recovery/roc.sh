@@ -21,20 +21,24 @@ module load gurobi
 
 REPLICATION="${SLURM_ARRAY_TASK_ID}"
 METHOD="${METHOD:-sm_l1}"
-PENALTY_CONSTANTS="0.1,0.2,0.5,1,1.2,1.4,1.6,1.8,2,2.2,2.5,3,5"
+TOPOLOGY="${TOPOLOGY:-lattice_hubs}"
+P="${P:-1000}"
+N="${N:-1000}"
+PENALTY_CONSTANTS="0.1,0.2,0.5,1,1.2,1.4,1.6,1.8,2,2.2,2.5,3,5,10"
+RESULTS_DIR="experiments_results/gaussian_primary_graph_recovery/topology=${TOPOLOGY}_p=${P}_n=${N}"
 
 python3 -u -m experiments.Run_gaussian_roc \
   --stage "evaluation" \
   --rep-list "${REPLICATION}" \
   --job-name "roc" \
-  --topology "erdos_renyi" \
-  --p "20" \
-  --n "400" \
+  --topology "${TOPOLOGY}" \
+  --p "${P}" \
+  --n "${N}" \
   --method-list "${METHOD}" \
   --penalty-constant-list "${PENALTY_CONSTANTS}" \
   --candidate-rule "graphical_lasso" \
-  --screen-alpha "0.01" \
-  --results-csv "experiments_results/gaussian_primary_graph_recovery_roc_${METHOD}_rep${REPLICATION}.csv" \
+  --screen-alpha "0.08" \
+  --results-csv "${RESULTS_DIR}/${METHOD}_rep${REPLICATION}.csv" \
   --time-limit "600" \
   --mip-gap "0.001" \
   --threads "8" \

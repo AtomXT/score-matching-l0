@@ -1,0 +1,2 @@
+stage,study,job_name,instance_id,topology,p,n,rep,method,penalty_constant,penalty_rate,lambda,status,fit_available,certified,runtime_seconds,UB,LB,gap,TP,FP,FN,TPR,FPR,F1,exact_recovery,shd,error_message
+evaluation,primary_graph_recovery,roc,topology=erdos_renyi_p=020_n=0400_degree=04_signal=0.200_kappa=10.0_graph=random_rep=008,erdos_renyi,20,400,8,sm_l0_core,0.1,log(p)/n,0.0007489330683884978,TIME_LIMIT,0.0,0.0,600.0839078426361,nan,-4.605294242107664,nan,,,,,,,,,

@@ -17,7 +17,7 @@ data/
 references/
 paper/
 .idea/
-experiments_results/
+# experiments_results/
 experiments/quest_jobs/outlog
 *local_check*
 

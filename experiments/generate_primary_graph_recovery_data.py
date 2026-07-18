@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Generate every dataset for the primary Gaussian graph-recovery study.
 
-This no-argument entry point creates ten registered p=500, n=1000 ROC datasets.
+This no-argument entry point creates all registered graph-recovery datasets.
 """
 
 from __future__ import annotations

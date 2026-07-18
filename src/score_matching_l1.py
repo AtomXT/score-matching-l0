@@ -122,8 +122,8 @@ def solve_score_matching_l1(
     ``lambda_value`` multiplies the sum over all ordered off-diagonal entries,
     exactly as in the uploaded ``highscore`` implementation.  When
     ``assume_centered`` is false, the sample mean is removed before constructing
-    the empirical covariance.  The primary experiment already centers and
-    scales every split using training-sample quantities.
+    the empirical covariance. The primary experiment already centers and scales
+    the observations before calling this function.
     """
     data = np.asarray(x, dtype=float)
 

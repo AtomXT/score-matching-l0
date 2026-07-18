@@ -102,13 +102,22 @@ def run_panel(panel: str, args: argparse.Namespace) -> None:
     runner_argv.extend(["--penalty-constant-list", args.penalty_constant_list])
     results_csv = args.results_csv
     if results_csv is None and args.stage == "evaluation":
-        # ``*_rep*.csv`` is the default input pattern of the summarizer.  Give
-        # both full and subset direct runs a unique, discoverable replication tag.
+        # Keep configurations in separate directories so rerunning another
+        # topology or sample-size setting cannot overwrite an earlier result.
         replication_tag = "-".join(map(str, parse_list(args.rep_list, int)))
+        if args.configuration_list is None:
+            configuration_tag = f"topology={args.topology}_p={args.p}_n={args.n}"
+        else:
+            configuration_tag = "configurations=" + args.configuration_list.replace(
+                ":", "-"
+            ).replace(";", "_")
+        method_tag = args.method_list.replace(",", "-").replace(" ", "")
         results_csv = (
             PROJECT_DIR
             / "experiments_results"
-            / f"gaussian_{STUDY}_{panel}_{args.job_name}_rep{replication_tag}.csv"
+            / f"gaussian_{STUDY}"
+            / configuration_tag
+            / f"{args.job_name}_{method_tag}_rep{replication_tag}.csv"
         )
     if results_csv is not None:
         runner_argv.extend(["--results-csv", str(results_csv)])

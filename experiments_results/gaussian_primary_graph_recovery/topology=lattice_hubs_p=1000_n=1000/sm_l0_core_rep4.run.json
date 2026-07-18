@@ -1,0 +1,127 @@
+{
+  "arguments": {
+    "big_m_init": 1000.0,
+    "candidate_rule": "graphical_lasso",
+    "configuration_list": null,
+    "data_root": "/gpfs/projects/p32811/score-matching-l0/data/gaussian_experiments",
+    "diagnostics_jsonl": null,
+    "glasso_max_iter": 1000,
+    "glasso_tolerance": 0.0001,
+    "graphl0_l2": 0.05,
+    "graphl0_m_bound": 100.0,
+    "job_name": "roc",
+    "l1_max_iter": 5000,
+    "l1_support_tolerance": 1e-06,
+    "l1_tolerance": 1e-06,
+    "max_instances": null,
+    "method_list": "sm_l0_core",
+    "mip_gap": 0.001,
+    "n_list": "1000",
+    "overwrite_results": true,
+    "p_list": "1000",
+    "penalty_constant_list": "0.1,0.2,0.5,1,1.2,1.4,1.6,1.8,2,2.2,2.5,3,5,10",
+    "rep_list": "4",
+    "results_csv": "experiments_results/gaussian_primary_graph_recovery/topology=lattice_hubs_p=1000_n=1000/sm_l0_core_rep4.csv",
+    "run_manifest": null,
+    "screen_alpha": 0.08,
+    "stage": "evaluation",
+    "study": "primary_graph_recovery",
+    "threads": 8,
+    "time_limit": 600.0,
+    "topology_list": "lattice_hubs",
+    "verbose": true
+  },
+  "diagnostics_jsonl": "experiments_results/gaussian_primary_graph_recovery/topology=lattice_hubs_p=1000_n=1000/sm_l0_core_rep4.diagnostics.jsonl",
+  "environment": {
+    "gurobi_version": "12.0.3",
+    "host": "qnode0165",
+    "mip_gap_target": 0.001,
+    "numpy_version": "1.26.3",
+    "python_version": "3.9.5",
+    "slurm_array_task_id": "4",
+    "slurm_job_id": "7001334",
+    "threads": 8,
+    "time_limit": 600.0
+  },
+  "fit_plan": [
+    {
+      "constant": 0.1,
+      "method": "sm_l0_core",
+      "penalty_rate": "log(p)/n"
+    },
+    {
+      "constant": 0.2,
+      "method": "sm_l0_core",
+      "penalty_rate": "log(p)/n"
+    },
+    {
+      "constant": 0.5,
+      "method": "sm_l0_core",
+      "penalty_rate": "log(p)/n"
+    },
+    {
+      "constant": 1.0,
+      "method": "sm_l0_core",
+      "penalty_rate": "log(p)/n"
+    },
+    {
+      "constant": 1.2,
+      "method": "sm_l0_core",
+      "penalty_rate": "log(p)/n"
+    },
+    {
+      "constant": 1.4,
+      "method": "sm_l0_core",
+      "penalty_rate": "log(p)/n"
+    },
+    {
+      "constant": 1.6,
+      "method": "sm_l0_core",
+      "penalty_rate": "log(p)/n"
+    },
+    {
+      "constant": 1.8,
+      "method": "sm_l0_core",
+      "penalty_rate": "log(p)/n"
+    },
+    {
+      "constant": 2.0,
+      "method": "sm_l0_core",
+      "penalty_rate": "log(p)/n"
+    },
+    {
+      "constant": 2.2,
+      "method": "sm_l0_core",
+      "penalty_rate": "log(p)/n"
+    },
+    {
+      "constant": 2.5,
+      "method": "sm_l0_core",
+      "penalty_rate": "log(p)/n"
+    },
+    {
+      "constant": 3.0,
+      "method": "sm_l0_core",
+      "penalty_rate": "log(p)/n"
+    },
+    {
+      "constant": 5.0,
+      "method": "sm_l0_core",
+      "penalty_rate": "log(p)/n"
+    },
+    {
+      "constant": 10.0,
+      "method": "sm_l0_core",
+      "penalty_rate": "log(p)/n"
+    }
+  ],
+  "instance_ids": [
+    "topology=lattice_hubs_p=1000_n=1000_graph=random_rep=004"
+  ],
+  "job_name": "roc",
+  "results_csv": "experiments_results/gaussian_primary_graph_recovery/topology=lattice_hubs_p=1000_n=1000/sm_l0_core_rep4.csv",
+  "schema_version": 1,
+  "stage": "evaluation",
+  "started_at": "2026-07-15T15:12:09.190139+00:00",
+  "study": "primary_graph_recovery"
+}

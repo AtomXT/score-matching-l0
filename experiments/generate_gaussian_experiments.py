@@ -130,16 +130,11 @@ def generate_one(
     if (directory / "dataset.npz").exists() and not overwrite:
         return {"directory": str(directory), **metadata, "generation_status": "existing"}
 
-    train = sample_rng.multivariate_normal(np.zeros(p), covariance, size=n)
-    validation = test = None
-    if topology != "lattice_hubs":
-        validation = sample_rng.multivariate_normal(np.zeros(p), covariance, size=n)
-        test = sample_rng.multivariate_normal(np.zeros(p), covariance, size=n)
+    covariance_factor = np.linalg.cholesky(covariance)
+    x = sample_rng.standard_normal((n, p)) @ covariance_factor.T
     save_instance(
         directory,
-        train=train,
-        validation=validation,
-        test=test,
+        x=x,
         covariance=covariance,
         precision=precision,
         adjacency=adjacency,

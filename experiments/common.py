@@ -42,9 +42,7 @@ def instance_name(metadata: dict[str, Any]) -> str:
 def save_instance(
     directory: Path,
     *,
-    train: np.ndarray,
-    validation: np.ndarray | None,
-    test: np.ndarray | None,
+    x: np.ndarray,
     covariance: np.ndarray,
     precision: np.ndarray,
     adjacency: np.ndarray,
@@ -53,15 +51,11 @@ def save_instance(
     """Save one complete synthetic instance and its generation record."""
     directory.mkdir(parents=True, exist_ok=True)
     arrays = {
-        "X_train": train,
+        "X": x,
         "Sigma": covariance,
         "precision": precision,
         "adjacency": adjacency.astype(np.int8),
     }
-    if validation is not None:
-        arrays["X_validation"] = validation
-    if test is not None:
-        arrays["X_test"] = test
     # Write each file atomically.  This matters on Quest when two panel jobs
     # encounter the one configuration shared by the primary-study panels.
     with tempfile.NamedTemporaryFile(dir=directory, suffix=".npz", delete=False) as file:
@@ -145,29 +139,6 @@ def estimation_metrics(truth: np.ndarray, estimate: np.ndarray) -> dict[str, flo
         "operator_error": np.linalg.norm(difference, ord=2),
         "max_entry_error": np.max(np.abs(difference)),
     }
-
-
-def heldout_scores(x: np.ndarray, precision: np.ndarray) -> dict[str, float]:
-    """Compute held-out Hyvarinen score and Gaussian negative log-likelihood."""
-    centered = x - x.mean(axis=0, keepdims=True)
-    covariance = centered.T @ centered / centered.shape[0]
-    with np.errstate(over="ignore", invalid="ignore", divide="ignore"):
-        score = 0.5 * np.trace(precision @ covariance @ precision) - np.trace(precision)
-        trace_term = np.trace(covariance @ precision)
-    # A positive determinant does not imply positive definiteness: a symmetric
-    # matrix can have an even number of negative eigenvalues.  Cholesky is the
-    # appropriate gate before interpreting the matrix as a Gaussian precision.
-    try:
-        cholesky = np.linalg.cholesky(precision)
-        logdet = 2.0 * np.log(np.diag(cholesky)).sum()
-        nll = (
-            0.5 * (trace_term - logdet)
-            if np.isfinite(logdet) and np.isfinite(trace_term)
-            else np.nan
-        )
-    except np.linalg.LinAlgError:
-        nll = np.nan
-    return {"heldout_score": float(score), "heldout_gaussian_nll": float(nll)}
 
 
 def graphical_lasso_screen(
