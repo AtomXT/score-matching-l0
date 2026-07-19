@@ -6,6 +6,6 @@ from __future__ import annotations
 NUMBER_OF_REPLICATIONS = 10
 
 EVALUATION_SETTINGS = {
-    "roc": (("lattice_hubs", 1000, 1000),),
+    "roc": (("erdos_renyi", 500, 2000),),
 }
 PANEL_SETTINGS = EVALUATION_SETTINGS

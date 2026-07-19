@@ -22,6 +22,7 @@ import numpy as np
 
 from experiments.common import (
     append_result,
+    graphical_lasso_screen,
     load_instance,
     parse_list,
     support_metrics,
@@ -34,7 +35,6 @@ from src import score_matching_core_miqp, score_matching_l1, score_matching_miqp
 
 
 PROJECT_DIR = Path(__file__).resolve().parents[1]
-MARGINAL_SCREEN_GAMMA = 0.5
 
 
 RESULT_COLUMNS = [
@@ -102,16 +102,12 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         "--candidate-rule",
         choices=["complete", "graphical_lasso"],
         default="complete",
-        help=(
-            "Legacy option retained for command compatibility. SM-L0 and "
-            "SM-L0-CORe use the fixed loose marginal screen; SM-L1 uses all edges."
-        ),
     )
     parser.add_argument(
         "--screen-alpha",
         type=float,
         default=0.01,
-        help="Legacy graphical-lasso screening value; unused by score matching.",
+        help="Graphical lasso penalty used only to screen candidate edges.",
     )
     parser.add_argument("--time-limit", type=float, default=3600.0)
     parser.add_argument("--mip-gap", type=float, default=0.01)
@@ -172,54 +168,26 @@ def candidate_edges(
     x: np.ndarray,
     truth: np.ndarray,
     *,
-    method: str,
-    lambda_value: float,
-) -> tuple[list[tuple[int, int]], float, dict[str, float | str | None]]:
-    """Construct the method-specific candidate set and its diagnostics.
-
-    SM-L0 and SM-L0-CORe retain an edge when its standardized one-edge
-    score-matching gain exceeds ``gamma * lambda``. SM-L1 is deliberately
-    unscreened. Other estimators do not consume ``edge_list`` and are recorded
-    as unscreened as well.
-    """
+    rule: str,
+    screen_alpha: float,
+    screen_max_iter: int,
+    screen_tolerance: float,
+) -> tuple[list[tuple[int, int]], float]:
+    """Construct one candidate set and report the fraction of true edges kept."""
     p = x.shape[1]
-    complete_edges = [(i, j) for i in range(p) for j in range(i + 1, p)]
-    if method in {"sm_l0", "sm_l0_core"}:
-        if lambda_value < 0.0:
-            raise ValueError("L0 marginal screening requires a nonnegative lambda")
-        effective_penalty = MARGINAL_SCREEN_GAMMA * float(lambda_value)
-        threshold = np.sqrt(effective_penalty / (1.0 + effective_penalty))
-
-        centered = np.asarray(x, dtype=float) - np.mean(x, axis=0, keepdims=True)
-        column_norms = np.linalg.norm(centered, axis=0)
-        if np.any(column_norms == 0.0):
-            raise ValueError("cannot marginally screen a constant data column")
-        correlations = (centered.T @ centered) / np.outer(
-            column_norms,
-            column_norms,
-        )
-        edges = [
-            (i, j)
-            for i in range(p)
-            for j in range(i + 1, p)
-            if abs(correlations[i, j]) > threshold
-        ]
-        screen = {
-            "candidate_rule": "score_matching_marginal",
-            "screen_gamma": MARGINAL_SCREEN_GAMMA,
-            "screen_threshold": float(threshold),
-        }
+    if rule == "complete":
+        edges = [(i, j) for i in range(p) for j in range(i + 1, p)]
     else:
-        edges = complete_edges
-        screen = {
-            "candidate_rule": "complete",
-            "screen_gamma": None,
-            "screen_threshold": None,
-        }
+        edges = graphical_lasso_screen(
+            x,
+            alpha=screen_alpha,
+            max_iter=screen_max_iter,
+            tolerance=screen_tolerance,
+        )
     true_edges = {(i, j) for i in range(p) for j in range(i + 1, p) if truth[i, j]}
     retained = len(true_edges.intersection(edges))
     recall = retained / len(true_edges) if true_edges else 1.0
-    return edges, recall, screen
+    return edges, recall
 
 
 def _support_metrics(
@@ -526,12 +494,6 @@ def run(args: argparse.Namespace) -> Path:
         "instance_ids": [dataset_path.parent.name for dataset_path, _ in selected_instances],
         "results_csv": results_csv,
         "diagnostics_jsonl": diagnostics_jsonl,
-        "score_matching_screening": {
-            "sm_l0": "score_matching_marginal",
-            "sm_l0_core": "score_matching_marginal",
-            "sm_l1": "complete",
-            "marginal_gamma": MARGINAL_SCREEN_GAMMA,
-        },
     }
     _write_json(run_manifest, manifest)
 
@@ -540,18 +502,20 @@ def run(args: argparse.Namespace) -> Path:
     for dataset_path, metadata in selected_instances:
         arrays, _ = load_instance(dataset_path.parent)
         arrays = standardize_instance(arrays)
+        edges, screen_recall = candidate_edges(
+            arrays["X"],
+            arrays["adjacency"],
+            rule=args.candidate_rule,
+            screen_alpha=args.screen_alpha,
+            screen_max_iter=args.glasso_max_iter,
+            screen_tolerance=args.glasso_tolerance,
+        )
         for method, constant in fit_plan:
             lambda_value, penalty_rate = penalty_value(
                 method,
                 constant,
                 int(metadata["p"]),
                 int(metadata["n"]),
-            )
-            edges, screen_recall, screen = candidate_edges(
-                arrays["X"],
-                arrays["adjacency"],
-                method=method,
-                lambda_value=lambda_value,
             )
             identifiers = {
                 "stage": args.stage,
@@ -589,7 +553,8 @@ def run(args: argparse.Namespace) -> Path:
             append_result(results_csv, row, RESULT_COLUMNS)
             diagnostic_record = {
                 **identifiers,
-                **screen,
+                "candidate_rule": args.candidate_rule,
+                "screen_alpha": args.screen_alpha,
                 "candidate_edges": len(edges),
                 "candidate_recall": screen_recall,
                 "fit": fit_output,

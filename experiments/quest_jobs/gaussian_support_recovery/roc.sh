@@ -1,10 +1,10 @@
 #!/bin/bash
 # Fit one method over the common ROC penalty path; each task uses one dataset.
 #SBATCH --account=p32811
-#SBATCH --partition=short
+#SBATCH --partition=normal
 #SBATCH --nodes=1
 #SBATCH --ntasks=8
-#SBATCH --time=03:00:00
+#SBATCH --time=08:00:00
 #SBATCH --mem=32G
 #SBATCH --array=0-9
 #SBATCH --job-name=sm_roc
@@ -21,12 +21,14 @@ module load gurobi
 
 REPLICATION="${SLURM_ARRAY_TASK_ID}"
 METHOD="${METHOD:-sm_l1}"
-TOPOLOGY="${TOPOLOGY:-lattice_hubs}"
+TOPOLOGY="${TOPOLOGY:-erdos_renyi}"
 P="${P:-1000}"
 N="${N:-1000}"
 PENALTY_CONSTANTS="0.1,0.2,0.5,1,1.2,1.4,1.6,1.8,2,2.2,2.5,3,5,10"
 RESULTS_DIR="experiments_results/gaussian_primary_graph_recovery/topology=${TOPOLOGY}_p=${P}_n=${N}"
 
+# To enable screening, replace the candidate rule below with:
+#   --candidate-rule "graphical_lasso" --screen-alpha "0.08"
 python3 -u -m experiments.Run_gaussian_roc \
   --stage "evaluation" \
   --rep-list "${REPLICATION}" \
@@ -36,8 +38,9 @@ python3 -u -m experiments.Run_gaussian_roc \
   --n "${N}" \
   --method-list "${METHOD}" \
   --penalty-constant-list "${PENALTY_CONSTANTS}" \
+  --candidate-rule "graphical_lasso" --screen-alpha "0.08" \
   --results-csv "${RESULTS_DIR}/${METHOD}_rep${REPLICATION}.csv" \
-  --time-limit "600" \
+  --time-limit "1200" \
   --mip-gap "0.001" \
   --threads "8" \
   --verbose \
