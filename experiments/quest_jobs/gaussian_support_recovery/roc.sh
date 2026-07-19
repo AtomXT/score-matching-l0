@@ -22,8 +22,8 @@ module load gurobi
 REPLICATION="${SLURM_ARRAY_TASK_ID}"
 METHOD="${METHOD:-sm_l1}"
 TOPOLOGY="${TOPOLOGY:-erdos_renyi}"
-P="${P:-1000}"
-N="${N:-1000}"
+P="${P:-500}"
+N="${N:-250}"
 PENALTY_CONSTANTS="0.1,0.2,0.5,1,1.2,1.4,1.6,1.8,2,2.2,2.5,3,5,10"
 RESULTS_DIR="experiments_results/gaussian_primary_graph_recovery/topology=${TOPOLOGY}_p=${P}_n=${N}"
 
@@ -38,7 +38,7 @@ python3 -u -m experiments.Run_gaussian_roc \
   --n "${N}" \
   --method-list "${METHOD}" \
   --penalty-constant-list "${PENALTY_CONSTANTS}" \
-  --candidate-rule "graphical_lasso" --screen-alpha "0.08" \
+  --candidate-rule "graphical_lasso" --screen-alpha "0.15" \
   --results-csv "${RESULTS_DIR}/${METHOD}_rep${REPLICATION}.csv" \
   --time-limit "1200" \
   --mip-gap "0.001" \
