@@ -33,6 +33,7 @@ def build_gaussian_score_matching_formulation(
         "q_prof": -B.T @ (1.0 / diagonal),
         "Q_alpha_alpha": np.diag(diagonal),
         "Q_alpha_beta": B,
+        "Q_beta_beta": 0.5 * (C + C.T),
         "q_alpha": np.ones(p),
     }
 

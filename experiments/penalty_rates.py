@@ -8,6 +8,7 @@ import math
 PENALTY_RATE_LABELS = {
     "sm_l0": "log(p)/n",
     "sm_l0_core": "log(p)/n",
+    "sm_l0_milp": "log(p)/n",
     "graphl0": "log(p)/n",
     "sm_l1": "sqrt(log(p)/n)",
     "glasso": "sqrt(log(p)/n)",

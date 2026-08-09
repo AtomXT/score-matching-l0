@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Run the p=500, n=1000 Erdos--Renyi ROC experiment."""
+"""Run the registered p=500, n=250 Erdos--Renyi ROC experiment."""
 
 from __future__ import annotations
 
@@ -23,7 +23,7 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser.add_argument("--configuration-list", default=None)
     parser.add_argument("--topology", default="erdos_renyi")
     parser.add_argument("--p", type=int, default=500)
-    parser.add_argument("--n", type=int, default=1000)
+    parser.add_argument("--n", type=int, default=250)
     parser.add_argument("--max-instances", type=int, default=None)
     parser.add_argument("--method-list", default="sm_l1")
     parser.add_argument(

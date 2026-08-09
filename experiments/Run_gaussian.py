@@ -28,7 +28,7 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser.add_argument(
         "--method-list",
         default="sm_l0_core",
-        help="sm_l0, sm_l0_core, sm_l1, graphl0, or glasso.",
+        help="sm_l0, sm_l0_core, sm_l0_milp, sm_l1, graphl0, or glasso.",
     )
     parser.add_argument(
         "--penalty-constant-list",

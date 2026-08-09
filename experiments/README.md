@@ -36,11 +36,14 @@ record the population targets and generation seeds.
 
 `Run_gaussian_roc.py` exposes `p`, `n`, method, penalty path, screening penalty,
 solver limits, and output paths as explicit arguments. Its defaults load
-replication 0 at `p=500, n=1000` and run SM–L1:
+replication 0 at `p=500, n=250` and run SM–L1:
 
 ```bash
 python3 experiments/Run_gaussian_roc.py
 ```
+
+Select the support-optimality MILP through the same runner with
+`--method-list sm_l0_milp`.
 
 For example, an SM–L0 evaluation is:
 
@@ -74,22 +77,32 @@ Gurobi fits additionally record the incumbent objective (`UB`), best bound
 
 ## Quest and plotting
 
-Submit one ten-task array for SM–L0 and one for SM–L1:
+Submit ten-task arrays for SM–L0 CORe, the support-optimality MILP, and SM–L1:
 
 ```bash
 bash experiments/quest_jobs/gaussian_support_recovery/submit_all.sh
+```
+
+To submit only the support-optimality MILP array, use:
+
+```bash
+sbatch --export=ALL,METHOD=sm_l0_milp \
+  experiments/quest_jobs/gaussian_support_recovery/roc.sh
 ```
 
 After the arrays finish, average the metrics at each penalty point and draw the
 ROC and precision–recall plots:
 
 ```bash
-python3 analysis/plot_gaussian_roc.py
+python3 analysis/plot_gaussian_roc.py --p 500 --n 250
 ```
+
+The plotter discovers `sm_l0_milp_rep*.csv` alongside the other method files
+and labels that curve “SM–L0 support MILP.”
 
 Results and plots are grouped by configuration under
 `experiments_results/gaussian_primary_graph_recovery/`. For example,
-`topology=erdos_renyi_p=500_n=1000/` contains that configuration's replication
+`topology=erdos_renyi_p=500_n=250/` contains that configuration's replication
 CSVs, `roc_summary.csv`, `roc.png`, and `pr.png`. Failed fits are excluded; the
 summary reports the mean and standard error of TPR, FPR, and precision,
 together with the number of available replications for each point.
@@ -103,7 +116,7 @@ into one directly runnable script:
 python3 experiments/Run_gaussian.py
 ```
 
-Its defaults fit SM–L1 once at `c=1` on replication 0 with `p=500, n=1000`. Change
+Its defaults fit SM–L0 CORe once at `c=2.28` on replication 0 with `p=20, n=400`. Change
 `--topology`, `--p`, `--n`, `--method-list`, and
 `--penalty-constant-list` directly for manual tests; the requested saved dataset
 must already exist.

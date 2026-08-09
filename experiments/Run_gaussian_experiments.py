@@ -31,7 +31,12 @@ from experiments.penalty_rates import (
     PENALTY_RATE_LABELS,
     penalty_value,
 )
-from src import score_matching_core_miqp, score_matching_l1, score_matching_miqp
+from src import (
+    score_matching_core_miqp,
+    score_matching_l1,
+    score_matching_miqp,
+    score_matching_support_milp,
+)
 
 
 PROJECT_DIR = Path(__file__).resolve().parents[1]
@@ -81,7 +86,10 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser.add_argument(
         "--method-list",
         default="sm_l0,sm_l1",
-        help="Methods: sm_l0, sm_l0_core, sm_l1, graphl0, or glasso.",
+        help=(
+            "Methods: sm_l0, sm_l0_core, sm_l0_milp, sm_l1, graphl0, "
+            "or glasso."
+        ),
     )
     parser.add_argument(
         "--penalty-constant-list",
@@ -200,7 +208,8 @@ def _support_metrics(
 
 def standardize_instance(arrays: dict[str, np.ndarray]) -> dict[str, np.ndarray]:
     """Standardize the observations columnwise."""
-    x = np.asarray(arrays["X"], dtype=float)
+    data_key = "X" if "X" in arrays else "X_train"
+    x = np.asarray(arrays[data_key], dtype=float)
     location = x.mean(axis=0)
     scale = x.std(axis=0, ddof=0)
 
@@ -218,12 +227,20 @@ def fit_method(
 ) -> dict[str, Any]:
     """Fit one method and return its graph metrics and solver diagnostics."""
     x = arrays["X"]
-    if method in {"sm_l0", "sm_l0_core"}:
-        solver = (
-            score_matching_core_miqp.solve_score_matching_core_miqp
-            if method == "sm_l0_core"
-            else score_matching_miqp.solve_score_matching_miqp
-        )
+    if method in {"sm_l0", "sm_l0_core", "sm_l0_milp"}:
+        solvers = {
+            "sm_l0": score_matching_miqp.solve_score_matching_miqp,
+            "sm_l0_core": score_matching_core_miqp.solve_score_matching_core_miqp,
+            "sm_l0_milp": (
+                score_matching_support_milp.solve_score_matching_support_milp
+            ),
+        }
+        formulations = {
+            "sm_l0": "standard",
+            "sm_l0_core": "core",
+            "sm_l0_milp": "support_optimality_milp",
+        }
+        solver = solvers[method]
         solution = solver(
             x,
             lambda_value=lambda_value,
@@ -242,7 +259,7 @@ def fit_method(
                 solution["has_solution"] and solution["mip_gap"] <= args.mip_gap
             ),
             "runtime_seconds": solution["runtime_seconds"],
-            "formulation": "core" if method == "sm_l0_core" else "standard",
+            "formulation": formulations[method],
             "UB": solution["objective"],
             "LB": solution["objective_bound"],
             "gap": solution["mip_gap"],
@@ -259,6 +276,24 @@ def fit_method(
             "big_m_relaxation_runtime_seconds": solution[
                 "big_m_relaxation_runtime_seconds"
             ],
+            **(
+                {
+                    "diagonal_stationarity_residual": solution[
+                        "diagonal_stationarity_residual"
+                    ],
+                    "active_stationarity_residual": solution[
+                        "active_stationarity_residual"
+                    ],
+                    "inactive_coefficient_residual": solution[
+                        "inactive_coefficient_residual"
+                    ],
+                    "objective_identity_residual": solution[
+                        "objective_identity_residual"
+                    ],
+                }
+                if method == "sm_l0_milp"
+                else {}
+            ),
             **(
                 _support_metrics(arrays, solution["adjacency"])
                 if solution["has_solution"]

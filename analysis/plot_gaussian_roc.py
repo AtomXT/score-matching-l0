@@ -22,7 +22,7 @@ PROJECT_DIR = Path(__file__).resolve().parents[1]
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--p", type=int, default=500)
-    parser.add_argument("--n", type=int, default=1000)
+    parser.add_argument("--n", type=int, default=250)
     parser.add_argument("--topology", default="erdos_renyi")
     parser.add_argument(
         "--results-root",
@@ -121,7 +121,12 @@ def main() -> None:
         writer.writeheader()
         writer.writerows(summary)
 
-    labels = {"sm_l0": "SM–L0", "sm_l0_core": "SM–L0 CORe", "sm_l1": "SM–L1"}
+    labels = {
+        "sm_l0": "SM–L0",
+        "sm_l0_core": "SM–L0 CORe",
+        "sm_l0_milp": "SM–L0 support MILP",
+        "sm_l1": "SM–L1",
+    }
     fig, axis = plt.subplots(figsize=(6.2, 5.2))
     for method in sorted({row["method"] for row in summary}):
         points = sorted(
