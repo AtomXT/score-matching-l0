@@ -17,19 +17,26 @@ import matplotlib.pyplot as plt
 
 
 PROJECT_DIR = Path(__file__).resolve().parents[1]
+GAUSSIAN_RESULTS_ROOT = (
+    PROJECT_DIR / "experiments_results" / "gaussian_primary_graph_recovery"
+)
 
 
-def main() -> None:
-    parser = argparse.ArgumentParser(description=__doc__)
+def main(
+    argv: list[str] | None = None,
+    *,
+    description: str = __doc__,
+    default_n: int = 250,
+    default_results_root: Path = GAUSSIAN_RESULTS_ROOT,
+) -> None:
+    parser = argparse.ArgumentParser(description=description)
     parser.add_argument("--p", type=int, default=500)
-    parser.add_argument("--n", type=int, default=250)
+    parser.add_argument("--n", type=int, default=default_n)
     parser.add_argument("--topology", default="erdos_renyi")
     parser.add_argument(
         "--results-root",
         type=Path,
-        default=PROJECT_DIR
-        / "experiments_results"
-        / "gaussian_primary_graph_recovery",
+        default=default_results_root,
     )
     parser.add_argument(
         "--input-glob",
@@ -51,7 +58,7 @@ def main() -> None:
         type=Path,
         default=None,
     )
-    args = parser.parse_args()
+    args = parser.parse_args(argv)
 
     results_dir = (
         args.results_root / f"topology={args.topology}_p={args.p}_n={args.n}"

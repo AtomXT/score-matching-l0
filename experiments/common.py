@@ -153,12 +153,56 @@ def graphical_lasso_screen(
     if alpha <= 0:
         raise ValueError("graphical lasso screening alpha must be positive")
 
-    from sklearn.covariance import graphical_lasso
-
     centered = np.asarray(x, dtype=float) - np.mean(x, axis=0, keepdims=True)
     sample_covariance = centered.T @ centered / centered.shape[0]
-    _, precision = graphical_lasso(
+    return _graphical_lasso_screen_from_covariance(
         sample_covariance,
+        alpha=alpha,
+        max_iter=max_iter,
+        tolerance=tolerance,
+        support_tolerance=support_tolerance,
+    )
+
+
+def spearman_graphical_lasso_screen(
+    x: np.ndarray,
+    alpha: float = 0.01,
+    *,
+    max_iter: int = 1_000,
+    tolerance: float = 1e-4,
+    support_tolerance: float = 1e-8,
+) -> list[tuple[int, int]]:
+    """Screen with graphical lasso applied to a rank-based correlation."""
+    if alpha <= 0:
+        raise ValueError("graphical lasso screening alpha must be positive")
+
+    from scipy.stats import rankdata
+
+    ranks = rankdata(np.asarray(x, dtype=float), axis=0)
+    spearman_correlation = np.corrcoef(ranks, rowvar=False)
+    np.fill_diagonal(spearman_correlation, 1.0)
+    return _graphical_lasso_screen_from_covariance(
+        spearman_correlation,
+        alpha=alpha,
+        max_iter=max_iter,
+        tolerance=tolerance,
+        support_tolerance=support_tolerance,
+    )
+
+
+def _graphical_lasso_screen_from_covariance(
+    covariance: np.ndarray,
+    *,
+    alpha: float,
+    max_iter: int,
+    tolerance: float,
+    support_tolerance: float,
+) -> list[tuple[int, int]]:
+    """Return the support from a graphical-lasso covariance fit."""
+    from sklearn.covariance import graphical_lasso
+
+    _, precision = graphical_lasso(
+        covariance,
         alpha=alpha,
         max_iter=max_iter,
         tol=tolerance,

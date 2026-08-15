@@ -107,6 +107,32 @@ CSVs, `roc_summary.csv`, `roc.png`, and `pr.png`. Failed fits are excluded; the
 summary reports the mean and standard error of TPR, FPR, and precision,
 together with the number of available replications for each point.
 
+## Non-Gaussian robustness ROC
+
+The matching robustness experiment replaces the Gaussian observations with a
+covariance-matched multivariate t distribution with three degrees of freedom.
+It keeps the ten `p=500, n=1000` population graphs paired with the Gaussian
+study and applies the same Gaussian score-matching methods under deliberate
+model misspecification. This adapts the manuscript's heavy-tail robustness
+design to the requested dimensions; it is not the separate interaction-power
+GSM experiment.
+
+Generate the ten saved datasets, submit the three method arrays, and plot the
+completed paths with:
+
+```bash
+python3 experiments/generate_nongaussian_roc_data.py
+bash experiments/quest_jobs/nongaussian_support_recovery/submit_all.sh
+python3 analysis/plot_nongaussian_roc.py
+```
+
+The non-Gaussian runner uses a Spearman rank-correlation graphical-lasso screen
+by default. This keeps screening stable under the shared heavy-tail scale; the
+selected candidate set and its population-edge recall remain recorded in each
+diagnostics file. Data and results are isolated under
+`data/nongaussian_experiments/robustness_roc/` and
+`experiments_results/nongaussian_robustness_roc/`, respectively.
+
 ## Single tests
 
 The old sample-size, dimension, and topology runners have been consolidated

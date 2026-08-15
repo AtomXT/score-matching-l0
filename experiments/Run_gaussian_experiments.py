@@ -25,6 +25,7 @@ from experiments.common import (
     graphical_lasso_screen,
     load_instance,
     parse_list,
+    spearman_graphical_lasso_screen,
     support_metrics,
 )
 from experiments.penalty_rates import (
@@ -108,7 +109,7 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser.add_argument("--max-instances", type=int, default=None)
     parser.add_argument(
         "--candidate-rule",
-        choices=["complete", "graphical_lasso"],
+        choices=["complete", "graphical_lasso", "spearman_graphical_lasso"],
         default="complete",
     )
     parser.add_argument(
@@ -186,7 +187,12 @@ def candidate_edges(
     if rule == "complete":
         edges = [(i, j) for i in range(p) for j in range(i + 1, p)]
     else:
-        edges = graphical_lasso_screen(
+        screen = (
+            graphical_lasso_screen
+            if rule == "graphical_lasso"
+            else spearman_graphical_lasso_screen
+        )
+        edges = screen(
             x,
             alpha=screen_alpha,
             max_iter=screen_max_iter,

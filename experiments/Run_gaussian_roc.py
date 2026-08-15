@@ -13,17 +13,28 @@ if __package__ in {None, ""}:
 from experiments.primary_panel_workflow import OUTPUT_ROOT, run_panel
 
 
-def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
+def parse_args(
+    argv: list[str] | None = None,
+    *,
+    description: str = __doc__,
+    default_job_name: str = "roc_local_check",
+    default_n: int = 250,
+    default_data_root: Path = OUTPUT_ROOT,
+    default_candidate_rule: str = "graphical_lasso",
+    default_screen_alpha: float = 0.01,
+    default_glasso_tolerance: float = 1e-4,
+) -> argparse.Namespace:
     parser = argparse.ArgumentParser(
-        description=__doc__, formatter_class=argparse.ArgumentDefaultsHelpFormatter
+        description=description,
+        formatter_class=argparse.ArgumentDefaultsHelpFormatter,
     )
     parser.add_argument("--stage", choices=["local_check", "evaluation"], default="local_check")
-    parser.add_argument("--job-name", default="roc_local_check")
+    parser.add_argument("--job-name", default=default_job_name)
     parser.add_argument("--rep-list", default="0")
     parser.add_argument("--configuration-list", default=None)
     parser.add_argument("--topology", default="erdos_renyi")
     parser.add_argument("--p", type=int, default=500)
-    parser.add_argument("--n", type=int, default=250)
+    parser.add_argument("--n", type=int, default=default_n)
     parser.add_argument("--max-instances", type=int, default=None)
     parser.add_argument("--method-list", default="sm_l1")
     parser.add_argument(
@@ -33,10 +44,10 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     )
     parser.add_argument(
         "--candidate-rule",
-        choices=["complete", "graphical_lasso"],
-        default="graphical_lasso",
+        choices=["complete", "graphical_lasso", "spearman_graphical_lasso"],
+        default=default_candidate_rule,
     )
-    parser.add_argument("--screen-alpha", type=float, default=0.01)
+    parser.add_argument("--screen-alpha", type=float, default=default_screen_alpha)
     parser.add_argument("--time-limit", type=float, default=600.0)
     parser.add_argument("--mip-gap", type=float, default=0.01)
     parser.add_argument("--threads", type=int, default=8)
@@ -47,8 +58,10 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser.add_argument("--graphl0-l2", type=float, default=0.05)
     parser.add_argument("--graphl0-m-bound", type=float, default=100.0)
     parser.add_argument("--glasso-max-iter", type=int, default=1_000)
-    parser.add_argument("--glasso-tolerance", type=float, default=1e-4)
-    parser.add_argument("--data-root", type=Path, default=OUTPUT_ROOT)
+    parser.add_argument(
+        "--glasso-tolerance", type=float, default=default_glasso_tolerance
+    )
+    parser.add_argument("--data-root", type=Path, default=default_data_root)
     parser.add_argument("--results-csv", type=Path, default=None)
     parser.add_argument("--overwrite-results", action="store_true")
     parser.add_argument("--verbose", action="store_true")

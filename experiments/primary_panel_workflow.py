@@ -42,11 +42,17 @@ def generate_panel_cli(panel: str, argv: list[str] | None = None) -> None:
     )
 
 
-def run_panel(panel: str, args: argparse.Namespace) -> None:
+def run_panel(
+    panel: str,
+    args: argparse.Namespace,
+    *,
+    study: str = STUDY,
+    results_prefix: str = "gaussian",
+) -> None:
     """Pass one panel runner's explicit arguments to the fitting engine."""
     runner_argv = [
         "--study",
-        STUDY,
+        study,
         "--job-name",
         args.job_name,
         "--stage",
@@ -101,7 +107,7 @@ def run_panel(panel: str, args: argparse.Namespace) -> None:
         runner_argv.extend(["--max-instances", str(args.max_instances)])
     runner_argv.extend(["--penalty-constant-list", args.penalty_constant_list])
     results_csv = args.results_csv
-    if results_csv is None and args.stage == "evaluation":
+    if results_csv is None:
         # Keep configurations in separate directories so rerunning another
         # topology or sample-size setting cannot overwrite an earlier result.
         replication_tag = "-".join(map(str, parse_list(args.rep_list, int)))
@@ -115,7 +121,7 @@ def run_panel(panel: str, args: argparse.Namespace) -> None:
         results_csv = (
             PROJECT_DIR
             / "experiments_results"
-            / f"gaussian_{STUDY}"
+            / f"{results_prefix}_{study}"
             / configuration_tag
             / f"{args.job_name}_{method_tag}_rep{replication_tag}.csv"
         )
