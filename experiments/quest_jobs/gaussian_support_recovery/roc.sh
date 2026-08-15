@@ -21,15 +21,15 @@ source activate python39
 module load gurobi
 
 REPLICATION="${SLURM_ARRAY_TASK_ID}"
-METHOD="${METHOD:-sm_l1}"
+METHOD="${METHOD:-sm_l0_milp}"
 # Supported METHOD values include sm_l0, sm_l0_core, sm_l0_milp, and sm_l1.
 TOPOLOGY="${TOPOLOGY:-erdos_renyi}"
 P="${P:-500}"
-N="${N:-250}"
+N="${N:-1000}"
 PENALTY_CONSTANTS="${PENALTY_CONSTANTS:-0.1,0.2,0.5,1,1.2,1.4,1.6,1.8,2,2.2,2.5,3,5,10}"
-SCREEN_ALPHA="${SCREEN_ALPHA:-0.15}"
+SCREEN_ALPHA="${SCREEN_ALPHA:-0.1}"
 TIME_LIMIT="${TIME_LIMIT:-1200}"
-MIP_GAP="${MIP_GAP:-0.001}"
+MIP_GAP="${MIP_GAP:-0.0001}"
 RESULTS_DIR="experiments_results/gaussian_primary_graph_recovery/topology=${TOPOLOGY}_p=${P}_n=${N}"
 
 python3 -u -m experiments.Run_gaussian_roc \
