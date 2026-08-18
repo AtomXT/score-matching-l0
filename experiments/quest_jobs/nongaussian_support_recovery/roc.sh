@@ -6,7 +6,7 @@
 #SBATCH --ntasks=1
 #SBATCH --cpus-per-task=8
 #SBATCH --time=08:00:00
-#SBATCH --mem=32G
+#SBATCH --mem=16G
 #SBATCH --array=0-9
 #SBATCH --job-name=sm_t3_roc
 #SBATCH --output=experiments/quest_jobs/outlog/%x_%A_%a.log
@@ -27,6 +27,7 @@ TOPOLOGY="${TOPOLOGY:-erdos_renyi}"
 P="${P:-500}"
 N="${N:-1000}"
 PENALTY_CONSTANTS="${PENALTY_CONSTANTS:-0.1,0.2,0.5,1,1.2,1.4,1.6,1.8,2,2.2,2.5,3,5,10}"
+CANDIDATE_RULE="${CANDIDATE_RULE:-spearman_graphical_lasso}"
 SCREEN_ALPHA="${SCREEN_ALPHA:-0.1}"
 TIME_LIMIT="${TIME_LIMIT:-1200}"
 MIP_GAP="${MIP_GAP:-0.0001}"
@@ -41,7 +42,7 @@ python3 -u -m experiments.Run_nongaussian_roc \
   --n "${N}" \
   --method-list "${METHOD}" \
   --penalty-constant-list "${PENALTY_CONSTANTS}" \
-  --candidate-rule "spearman_graphical_lasso" --screen-alpha "${SCREEN_ALPHA}" \
+  --candidate-rule "${CANDIDATE_RULE}" --screen-alpha "${SCREEN_ALPHA}" \
   --results-csv "${RESULTS_DIR}/${METHOD}_rep${REPLICATION}.csv" \
   --time-limit "${TIME_LIMIT}" \
   --mip-gap "${MIP_GAP}" \
